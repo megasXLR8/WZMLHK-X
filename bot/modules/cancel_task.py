@@ -153,8 +153,8 @@ async def cancel_all_update(_, query):
     is_sudo = await CustomFilters.sudo("", query)
     if not is_sudo and user_id and user_id != query.from_user.id:
         await query.answer("Not Yours!", show_alert=True)
-        return
-    await query.answer()
+    else:
+        await query.answer()
     if data[1] == "close":
         await delete_message(reply_to, message)
     elif data[1] == "back":
@@ -168,9 +168,7 @@ async def cancel_all_update(_, query):
         await edit_message(message, "Choose tasks to cancel!", button)
     elif data[1] == "ms":
         buttons = button_build.ButtonMaker()
-        buttons.data_button(
-            "Yes!", f"canall {data[2]} confirm {user_id}", style=ButtonStyle.SUCCESS
-        )
+        buttons.data_button("Yes!", f"canall {data[2]} confirm {user_id}")
         buttons.data_button("Back", f"canall back confirm {user_id}")
         buttons.data_button(
             "Close", f"canall close confirm {user_id}", style=ButtonStyle.DANGER

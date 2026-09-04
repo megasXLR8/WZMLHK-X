@@ -1,6 +1,8 @@
-FROM reignz3/wzmlhk:wzadv-3.1.10
+FROM reignz3/wzml:hk
 
 WORKDIR /usr/src/app
+
+RUN chmod 777 /usr/src/app
 
 COPY requirements.txt .
 RUN uv pip install --python /wzvenv/bin/python --no-cache-dir -r requirements.txt

@@ -1,9 +1,10 @@
 from asyncio import sleep
 from secrets import token_hex
+from telegraph.aio import Telegraph
+from telegraph.exceptions import RetryAfterError
 
 from ... import LOGGER
 from ...core.config_manager import Config
-from .telegraph_utils import Telegraph, RetryAfterError
 
 
 class TelegraphHelper:
@@ -17,8 +18,8 @@ class TelegraphHelper:
         try:
             await self._telegraph.create_account(
                 short_name=token_hex(5),
-                author_name=Config.AUTHOR_NAME,
-                author_url=Config.AUTHOR_URL,
+                author_name=self._author_name,
+                author_url=self._author_url,
             )
         except Exception as e:
             LOGGER.error(f"Failed to create Telegraph Account: {e}")
@@ -27,8 +28,8 @@ class TelegraphHelper:
         try:
             return await self._telegraph.create_page(
                 title=title,
-                author_name=Config.AUTHOR_NAME,
-                author_url=Config.AUTHOR_URL,
+                author_name=self._author_name,
+                author_url=self._author_url,
                 html_content=content,
             )
         except RetryAfterError as st:
@@ -43,8 +44,8 @@ class TelegraphHelper:
             return await self._telegraph.edit_page(
                 path=path,
                 title=title,
-                author_name=Config.AUTHOR_NAME,
-                author_url=Config.AUTHOR_URL,
+                author_name=self._author_name,
+                author_url=self._author_url,
                 html_content=content,
             )
         except RetryAfterError as st:
@@ -80,3 +81,5 @@ class TelegraphHelper:
 
 
 telegraph = TelegraphHelper(Config.AUTHOR_NAME, Config.AUTHOR_URL)
+
+print(__name__)

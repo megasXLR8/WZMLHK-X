@@ -27,13 +27,6 @@ from ..telegram_helper.message_utils import update_status_message
 
 
 async def _remove_torrent(hash_, tag):
-    if TorrentManager.qbittorrent is None:
-        await TorrentManager.ensure_qbit()
-    if TorrentManager.qbittorrent is None:
-        async with qb_listener_lock:
-            if tag in qb_torrents:
-                del qb_torrents[tag]
-        return
     await TorrentManager.qbittorrent.torrents.delete([hash_], True)
     async with qb_listener_lock:
         if tag in qb_torrents:
@@ -83,12 +76,8 @@ async def _stop_duplicate(tor):
 
 
 @new_task
-async def _size_check(tor, tag):
+async def _size_check(tor):
     if task := await get_task_by_gid(tor.hash[:12]):
-        if task.listener.select and not task.listener.files_selected:
-            if tag in qb_torrents:
-                qb_torrents[tag]["size_check"] = False
-            return
         task.listener.size = tor.size
         mmsg = await limit_checker(task.listener)
         if mmsg:
@@ -145,14 +134,12 @@ async def _qb_listener():
     while True:
         async with qb_listener_lock:
             try:
-                if TorrentManager.qbittorrent is None:
-                    raise AttributeError("qbittorrent is None")
                 torrents = await TorrentManager.qbittorrent.torrents.info()
                 if len(torrents) == 0:
                     intervals["qb"] = ""
                     break
                 for tor_info in torrents:
-                    tag = tor_info.tags[0] if tor_info.tags else None
+                    tag = tor_info.tags[0]
                     if tag not in qb_torrents:
                         continue
                     state = tor_info.state
@@ -175,7 +162,7 @@ async def _qb_listener():
                             await _stop_duplicate(tor_info)
                         if not qb_torrents[tag]["size_check"]:
                             qb_torrents[tag]["size_check"] = True
-                            await _size_check(tor_info, tag)
+                            await _size_check(tor_info)
                     elif state == "stalledDL":
                         if (
                             not qb_torrents[tag]["rechecked"]
@@ -185,9 +172,7 @@ async def _qb_listener():
                             msg += f"{tor_info.hash} Downloaded Bytes: {tor_info.downloaded} "
                             msg += f"Size: {tor_info.size} Total Size: {tor_info.total_size}"
                             LOGGER.warning(msg)
-                            # Automatic recheck disabled: disk verification is very slow
-                            # on high I/O load. Continue/reannounce instead.
-                            await TorrentManager.qbittorrent.torrents.reannounce(
+                            await TorrentManager.qbittorrent.torrents.recheck(
                                 [tor_info.hash]
                             )
                             qb_torrents[tag]["rechecked"] = True
@@ -207,7 +192,7 @@ async def _qb_listener():
                         )
                     elif state == "error":
                         await _on_download_error(
-                            "Not enough space for this torrent on device", tor_info
+                            "No enough space for this torrent on device", tor_info
                         )
                     elif (
                         int(tor_info.completion_on.timestamp()) != -1
@@ -230,11 +215,7 @@ async def _qb_listener():
                         await _on_seed_finish(tor_info)
                         await sleep(0.5)
             except (ClientError, TimeoutError, Exception, AQError) as e:
-                if "NoneType" in str(e) or "None" in str(e):
-                    LOGGER.warning(f"QBittorrent unavailable: {e}")
-                else:
-                    LOGGER.error(str(e))
-                await TorrentManager.ensure_qbit()
+                LOGGER.error(str(e))
         await sleep(3)
 
 

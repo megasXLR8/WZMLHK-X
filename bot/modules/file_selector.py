@@ -9,14 +9,12 @@ from .. import (
     sabnzbd_client,
 )
 from ..core.config_manager import Config
-from ..core.tg_client import TgClient
 from ..core.torrent_manager import TorrentManager
 from ..helper.ext_utils.bot_utils import (
     bt_selection_buttons,
     new_task,
 )
 from ..helper.ext_utils.status_utils import get_task_by_gid, MirrorStatus
-from ..helper.ext_utils.task_manager import limit_checker
 from ..helper.telegram_helper.message_utils import (
     send_message,
     send_status_message,
@@ -30,29 +28,20 @@ async def select(_, message):
         await send_message(message, "Base URL not defined!")
         return
     user_id = message.from_user.id
-    text = message.text
-    if " " in text.split("\n")[0]:
-        text = text.replace(" ", "_", 1)
-    msg = text.split("_", maxsplit=1)
-    gid = None
-    task = None
+    msg = message.text.split()
     if len(msg) > 1:
-        cmd_data = msg[1].split("@", maxsplit=1)
-        if len(cmd_data) > 1 and cmd_data[1].strip() != TgClient.BNAME:
+        gid = msg[1]
+        task = await get_task_by_gid(gid)
+        if task is None:
+            await send_message(message, f"GID: <code>{gid}</code> Not Found.")
             return
-        gid = cmd_data[0].split()[0]
-        if gid:
-            task = await get_task_by_gid(gid)
-            if task is None:
-                await send_message(message, f"GID: <code>{gid}</code> Not Found.")
-                return
-    if task is None and (reply_to_id := message.reply_to_message_id):
+    elif reply_to_id := message.reply_to_message_id:
         async with task_dict_lock:
             task = task_dict.get(reply_to_id)
         if task is None:
             await send_message(message, "This is not an active task!")
             return
-    if task is None:
+    elif len(msg) == 1:
         msg = (
             "Reply to an active /cmd which was used to start the download or add gid along with cmd\n\n"
             + "This command mainly for selection incase you decided to select files from already added torrent/nzb. "
@@ -67,14 +56,8 @@ async def select(_, message):
     ):
         await send_message(message, "This task is not for you!")
         return
-    if getattr(task.listener, "is_staged_qbit", False):
-        await send_message(
-            message,
-            "Staged torrent selection is only available before the first batch starts. Use -s with the staged command.",
-        )
-        return
     if not iscoroutinefunction(task.status):
-        await send_message(message, "The task has finished the download stage!")
+        await send_message(message, "The task have finshed the download stage!")
         return
     if await task.status() not in [
         MirrorStatus.STATUS_DOWNLOAD,
@@ -83,7 +66,7 @@ async def select(_, message):
     ]:
         await send_message(
             message,
-            "Task should be in download or pause (in case message was deleted by mistake) or queued status (in case you have used torrent or nzb file)!",
+            "Task should be in download or pause (incase message deleted by wrong) or queued status (incase you have used torrent or nzb file)!",
         )
         return
     if task.name().startswith("[METADATA]") or task.name().startswith("Trying"):
@@ -91,12 +74,13 @@ async def select(_, message):
         return
 
     try:
-        await task.update()
-        id_ = task.hash() if task.listener.is_qbit else task.gid()
         if not task.queued:
+            await task.update()
+            id_ = task.gid()
             if task.listener.is_nzb:
                 await sabnzbd_client.pause_job(id_)
             elif task.listener.is_qbit:
+                id_ = task.hash()
                 await TorrentManager.qbittorrent.torrents.stop([id_])
             else:
                 try:
@@ -110,19 +94,9 @@ async def select(_, message):
         await send_message(message, "This is not a bittorrent or sabnzbd task!")
         return
 
-    SBUTTONS = bt_selection_buttons(id_, message)
-    msg = "<b>Download Paused!</b>\n\n<i>Select your files &amp; press <b>Done Selecting</b> to start.</i>"
+    SBUTTONS = bt_selection_buttons(id_)
+    msg = "Your download paused. Choose files then press Done Selecting button to resume downloading."
     await send_message(message, msg, SBUTTONS)
-
-
-async def _selection_limit_exceeded(task, message):
-    mmsg = await limit_checker(task.listener)
-    if not mmsg:
-        return False
-    await send_message(message, mmsg)
-    await task.cancel_task()
-    await delete_message(message)
-    return True
 
 
 @new_task
@@ -142,7 +116,6 @@ async def confirm_selection(_, query):
     elif data[1] == "done":
         await query.answer()
         id_ = data[3]
-        task.listener.files_selected = True
         if hasattr(task, "seeding"):
             if task.listener.is_qbit:
                 tor_info = (
@@ -159,15 +132,7 @@ async def confirm_selection(_, query):
                                     await remove(f_path)
                                 except Exception:
                                     pass
-                tor_info = (
-                    await TorrentManager.qbittorrent.torrents.info(hashes=[id_])
-                )[0]
-                task.listener.size = tor_info.size
-                if await _selection_limit_exceeded(task, message):
-                    return
-                if hasattr(task.listener, "staged_selection_event"):
-                    task.listener.staged_selection_event.set()
-                elif not task.queued:
+                if not task.queued:
                     await TorrentManager.qbittorrent.torrents.start([id_])
             else:
                 res = await TorrentManager.aria2.getFiles(id_)
@@ -177,11 +142,6 @@ async def confirm_selection(_, query):
                             await remove(f["path"])
                         except Exception:
                             pass
-                task.listener.size = sum(
-                    int(f["length"]) for f in res if f["selected"] == "true"
-                )
-                if await _selection_limit_exceeded(task, message):
-                    return
                 if not task.queued:
                     try:
                         await TorrentManager.aria2.unpause(id_)
@@ -190,12 +150,9 @@ async def confirm_selection(_, query):
                             f"{e} Error in resume, this mostly happens after abuse aria2. Try to use select cmd again!"
                         )
         elif task.listener.is_nzb:
-            if not task.queued:
-                await sabnzbd_client.resume_job(id_)
+            await sabnzbd_client.resume_job(id_)
         await send_status_message(message)
         await delete_message(message)
     else:
         await delete_message(message)
-        if hasattr(task.listener, "staged_selection_event"):
-            task.listener.staged_selection_event.set()
         await task.cancel_task()

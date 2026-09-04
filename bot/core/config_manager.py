@@ -1,25 +1,18 @@
-from ast import literal_eval
 from importlib import import_module
 from os import getenv
-from wz_bin import bin_name
 
 
 class Config:
-    ALLDEBRID_API_KEY = ""
-    ALLDEBRID_NO_SEED_TIMEOUT = 180
     AS_DOCUMENT = False
     AUTHORIZED_CHATS = ""
     BASE_URL = ""
+    BASE_URL_PORT = 80
     BOT_TOKEN = ""
     HELPER_TOKENS = ""
-    HELPER_STRINGS = ""
-    STREAM_TOKENS = ""
-    HELPER_BOT_PROXIES = ""
-    HELPER_USER_PROXIES = ""
     BOT_MAX_TASKS = 0
     BOT_PM = False
     CMD_SUFFIX = ""
-    COLORED_BTNS = True
+    COLORED_BTNS = False
     DEFAULT_LANG = "en"
     DATABASE_URL = ""
     DEFAULT_UPLOAD = "rc"
@@ -27,21 +20,11 @@ class Config:
     DEBRID_LINK_API = ""
     DISABLE_TORRENTS = False
     DISABLE_LEECH = False
-    DISABLE_MIRROR = False
     DISABLE_BULK = False
     DISABLE_MULTI = False
     DISABLE_SEED = False
-    DISABLE_FF_MODE = False
-    DISABLE_MEGA = False
-    DISABLE_PLUGINS = False
-    DISABLE_JD = True
-    DISABLE_NZB = True
     DISABLE_SEEDR = True
-    DISABLE_RSS = False
-    DISABLE_SEARCH = False
-    DISABLE_STREAM = False
-    DISABLE_YTDLP = False
-    PLUGIN_INDEXES = []
+    DISABLE_FF_MODE = False
     EQUAL_SPLITS = False
     EXCLUDED_EXTENSIONS = ""
     BLACKLISTED_KEYWORDS = ""
@@ -51,7 +34,6 @@ class Config:
     FORCE_SUB_IDS = ""
     GOFILE_API = ""
     GOFILE_FOLDER_ID = ""
-    GOFILE_AUTO_CREATE_FOLDER = False
     PIXELDRAIN_KEY = ""
     PROTECTED_API = ""
     BUZZHEAVIER_API = ""
@@ -65,23 +47,17 @@ class Config:
     AUTHOR_URL = "https://t.me/WZML_X"
     INSTADL_API = ""
     IMDB_TEMPLATE = ""
-    IMAGES = []
-    IMG_SEARCH = ""
-    IMG_PAGE = 1
-    USE_IMAGES = False
-    IMG_SOURCES = ["wallpaperflare"]
-    INC_TASK_NOTIFY = False
-    INC_TASK_RESUME = False
+    INCOMPLETE_TASK_NOTIFIER = False
+    INCOMPLETE_TASK_RESUME = False
     INDEX_URL = ""
     IS_TEAM_DRIVE = False
     JD_EMAIL = ""
     JD_PASS = ""
-    KUMA_URL = ""
-    MEGA_EMAIL = ""
-    MEGA_PASSWORD = ""
     SEEDR_EMAIL = ""
     SEEDR_PASSWORD = ""
     SEEDR_DELETE_FOLDER = False
+    MEGA_EMAIL = ""
+    MEGA_PASSWORD = ""
     DIRECT_LIMIT = 0
     MEGA_LIMIT = 0
     TORRENT_LIMIT = 0
@@ -97,31 +73,18 @@ class Config:
     EXTRACT_LIMIT = 0
     ARCHIVE_LIMIT = 0
     STORAGE_LIMIT = 0
-    MONTHLY_BANDWIDTH = 0
-    STAGED_TORRENT_STORAGE_PERCENT = 50
-    LEECH_LOG_CHAT = ""
-    LEECH_DUMP_CHATS = {}
+    LEECH_DUMP_CHAT = ""
     LINKS_LOG_ID = ""
     MIRROR_LOG_ID = ""
+    CLEAN_LOG_MSG = False
     LEECH_PREFIX = ""
     LEECH_CAPTION = ""
     LEECH_SUFFIX = ""
     LEECH_FONT = ""
     LEECH_SPLIT_SIZE = 2097152000
     MEDIA_GROUP = False
-    USE_HYPER = True
+    HYBRID_LEECH = True
     HYPER_THREADS = 0
-    HYPER_PIPELINE = 4
-    HYPER_CHUNK = 512 * 1024
-    MEM_BUDGET = 0
-    MEM_DEEP_STATS = False
-    STREAM_PIPELINE = 8
-    STREAM_CHUNK = 1048576
-    STREAM_PER_CLIENT = 6
-    STREAM_GATE = 96
-    CPU_LIMIT = 20
-    FFMPEG_CORES = "auto"
-    THROTTLE_SERVICES = "auto"
     HYDRA_IP = ""
     HYDRA_API_KEY = ""
     NAME_SWAP = ""
@@ -136,7 +99,7 @@ class Config:
     SHOW_CLOUD_LINK = True
     RCLONE_SERVE_USER = ""
     RCLONE_SERVE_PASS = ""
-    RCLONE_SERVE_PORT = 8081
+    RCLONE_SERVE_PORT = 8080
     RCLONE_REMOTE = ""
     REMOTE_BASE_PATH = ""
     RSS_CHAT = ""
@@ -156,8 +119,6 @@ class Config:
     TELEGRAM_HASH = ""
     TG_PROXY = None
     THUMBNAIL_LAYOUT = ""
-    TMDB_ACCESS_TOKEN = ""
-    AUTO_THUMBNAIL = False
     VERIFY_TIMEOUT = 0
     LOGIN_PASS = ""
     TORRENT_TIMEOUT = 0
@@ -165,16 +126,13 @@ class Config:
     USER_MAX_TASKS = 0
     USER_TIME_INTERVAL = 0
     UPLOAD_PATHS = {}
-    DRIVE_CATEGORY_MODE = False
-    DRIVE_CATEGORY_SA = ""
     UPSTREAM_REPO = ""
-    UPSTREAM_BRANCH = "wzv3"
+    UPSTREAM_BRANCH = "master"
+    UPDATE_PKGS = True
     USENET_SERVERS = []
     USER_SESSION_STRING = ""
-    TRANSMISSION_MODE = "both"
+    USER_TRANSMISSION = True
     USE_SERVICE_ACCOUNTS = False
-    ENABLE_TELEMETRY = True
-    WEB_ACCESS_PASSWORD = ""
     WEB_PINCODE = True
     YT_DLP_OPTIONS = {}
     YT_DESP = "Uploaded with WZML-X bot"
@@ -227,7 +185,6 @@ class Config:
                     "RCLONE_SERVE_URL",
                     "INDEX_URL",
                     "SEARCH_API_LINK",
-                    "KUMA_URL",
                 ]:
                     if value:
                         value = value.strip("/")
@@ -238,12 +195,6 @@ class Config:
                     except Exception:
                         continue
                 setattr(cls, attr, value)
-        if hasattr(settings, "LEECH_DUMP_CHAT"):
-            legacy_value = getattr(settings, "LEECH_DUMP_CHAT")
-            if legacy_value and not cls.LEECH_LOG_CHAT:
-                if isinstance(legacy_value, str):
-                    legacy_value = legacy_value.strip()
-                cls.LEECH_LOG_CHAT = legacy_value
         for key in ["BOT_TOKEN", "OWNER_ID", "TELEGRAM_API", "TELEGRAM_HASH"]:
             value = getattr(cls, key)
             if isinstance(value, str):
@@ -253,11 +204,6 @@ class Config:
 
     @classmethod
     def load_env(cls):
-        legacy_dump_chat = getenv("LEECH_DUMP_CHAT")
-        if legacy_dump_chat is not None and getenv("LEECH_LOG_CHAT") is None:
-            cls.LEECH_LOG_CHAT = cls._convert_env_type(
-                "LEECH_LOG_CHAT", legacy_dump_chat
-            )
         config_vars = cls.get_all()
         for key in config_vars:
             env_value = getenv(key)
@@ -288,31 +234,6 @@ class Config:
                 return float(value)
             except (ValueError, TypeError):
                 return original_value
-        elif isinstance(original_value, list):
-            if isinstance(value, list):
-                return value
-            if isinstance(value, str):
-                try:
-                    parsed = literal_eval(value)
-                    if isinstance(parsed, list):
-                        return parsed
-                except (ValueError, SyntaxError):
-                    pass
-                if value.startswith("[") and value.endswith("]"):
-                    return original_value
-                return [v.strip() for v in value.split(",") if v.strip()]
-            return original_value
-        elif isinstance(original_value, dict):
-            if isinstance(value, dict):
-                return value
-            if isinstance(value, str):
-                try:
-                    parsed = literal_eval(value)
-                    if isinstance(parsed, dict):
-                        return parsed
-                except (ValueError, SyntaxError):
-                    pass
-            return original_value
         return value
 
     @classmethod
@@ -326,7 +247,6 @@ class Config:
                     "RCLONE_SERVE_URL",
                     "INDEX_URL",
                     "SEARCH_API_LINK",
-                    "KUMA_URL",
                 ]:
                     if value:
                         value = value.strip("/")
@@ -338,10 +258,6 @@ class Config:
                         value = []
                 value = cls._convert_env_type(key, value)
                 setattr(cls, key, value)
-        if config_dict.get("LEECH_DUMP_CHAT") and not cls.LEECH_LOG_CHAT:
-            cls.LEECH_LOG_CHAT = cls._convert_env_type(
-                "LEECH_LOG_CHAT", config_dict["LEECH_DUMP_CHAT"]
-            )
         for key in ["BOT_TOKEN", "OWNER_ID", "TELEGRAM_API", "TELEGRAM_HASH"]:
             value = getattr(cls, key)
             if isinstance(value, str):
@@ -350,12 +266,9 @@ class Config:
                 raise ValueError(f"{key} variable is missing!")
 
 
-DEFAULT_CONFIG = Config.get_all()
-
-
 class BinConfig:
-    ARIA2_NAME = bin_name(0)
-    QBIT_NAME = bin_name(1)
-    FFMPEG_NAME = bin_name(2)
-    RCLONE_NAME = bin_name(3)
-    SABNZBD_NAME = bin_name(4)
+    ARIA2_NAME = "blitzfetcher"
+    QBIT_NAME = "stormtorrent"
+    FFMPEG_NAME = "mediaforge"
+    RCLONE_NAME = "ghostdrive"
+    SABNZBD_NAME = "newsripper"

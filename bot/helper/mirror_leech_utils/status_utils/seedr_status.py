@@ -28,23 +28,18 @@ class SeedrStatus:
         return f"{get_readable_file_size(self._info.get('speed', 0))}/s"
 
     def name(self):
-        return self._info.get("name") or self.listener.name or "Fetching Metadata..."
+        return self._info.get("name") or self.listener.name
 
     def size(self):
         return get_readable_file_size(self._info.get("size", 0))
 
     def eta(self):
-        speed = self._info.get("speed", 0)
-        if not speed:
-            return "-"
-        size = self._info.get("size", 0)
-        left = size - size * float(self._info.get("progress", 0)) / 100
-        return get_readable_time(left / speed) if left > 0 else "-"
+        return get_readable_time(eta) if (eta := self._info.get("eta", 0)) else "-"
 
     async def status(self):
-        if self._info.get("stopped"):
-            return MirrorStatus.STATUS_PAUSED
-        return MirrorStatus.STATUS_SEEDR
+        if self._info.get("is_queued", False):
+            return MirrorStatus.STATUS_QUEUEDL
+        return MirrorStatus.STATUS_DOWNLOAD
 
     def task(self):
         return self

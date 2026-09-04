@@ -1,5 +1,4 @@
 from asyncio import sleep
-from ast import literal_eval
 from pyrogram.enums import ButtonStyle
 from functools import partial
 from html import escape
@@ -14,6 +13,7 @@ from langcodes import Language
 from pyrogram.filters import create
 from pyrogram.handlers import MessageHandler
 
+from bot.helper.ext_utils.status_utils import get_readable_file_size
 
 from .. import (
     auth_chats,
@@ -29,11 +29,11 @@ from ..helper.ext_utils.bot_utils import (
     get_size_bytes,
     new_task,
     update_user_ldata,
+    encrypt_secret,
+    decrypt_secret,
 )
 from ..helper.ext_utils.db_handler import database
-from ..helper.ext_utils.mega_utils import get_mega_account_info
 from ..helper.ext_utils.media_utils import create_thumb
-from ..helper.ext_utils.status_utils import get_readable_file_size
 from ..helper.telegram_helper.button_build import ButtonMaker
 from ..helper.telegram_helper.message_utils import (
     delete_message,
@@ -65,7 +65,7 @@ uphoster_options = [
     "VIKINGFILE_FOLDER",
 ]
 rclone_options = ["RCLONE_CONFIG", "RCLONE_PATH", "RCLONE_FLAGS"]
-gdrive_options = ["TOKEN_PICKLE", "GDRIVE_ID", "INDEX_URL", "DRIVE_CAT"]
+gdrive_options = ["TOKEN_PICKLE", "GDRIVE_ID", "INDEX_URL"]
 ffset_options = [
     "FFMPEG_CMDS",
     "METADATA",
@@ -81,7 +81,6 @@ advanced_options = [
     "USER_COOKIE_FILE",
 ]
 yt_options = ["YT_DESP", "YT_TAGS", "YT_CATEGORY_ID", "YT_PRIVACY_STATUS"]
-mega_options = ["MEGA_EMAIL", "MEGA_PASSWORD"]
 seedr_options = ["SEEDR_EMAIL", "SEEDR_PASSWORD", "SEEDR_DELETE_FOLDER"]
 
 user_settings_text = {
@@ -110,7 +109,7 @@ user_settings_text = {
         "",
         """Send leech destination ID/USERNAME/PM. 
 * b:id/@username/pm (b: means leech by bot) (id or username of the chat or write pm means private message so bot will send the files in private to you) when you should use b:(leech by bot)? When your default settings is leech by user and you want to leech by bot for specific task.
-* u:id/@username(u: means leech by user) This in case OWNER added USER_STRING_SESSION.
+* u:id/@username(u: means leech by user) This incase OWNER added USER_STRING_SESSION.
 * h:id/@username(hybrid leech) h: to upload files by bot and user based on file size.
 * id/@username|topic_id(leech in specific chat and topic) add | without space and write topic id after chat id or username.
 ┖ <b>Time Left :</b> <code>60 sec</code>""",
@@ -163,7 +162,7 @@ user_settings_text = {
     "EXCLUDED_EXTENSIONS": (
         "",
         "",
-        "Send excluded extensions separated by space without dot at beginning. </i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
+        "Send exluded extenions seperated by space without dot at beginning. </i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
     ),
     "BLACKLISTED_KEYWORDS": (
         "",
@@ -196,9 +195,9 @@ Notes:
 - Add `-del` to the list which you want from the bot to delete the original files after command run complete!
 - To execute one of those lists in bot for example, you must use -ff subtitle (list key) or -ff convert (list key)
 Here I will explain how to use mltb.* which is reference to files you want to work on.
-1. First cmd: the input is mltb.mkv so this cmd will work only on mkv videos and the output is mltb.mkv also so all outputs are mkv. -del will delete the original media after complete run of the cmd.
-2. Second cmd: the input is mltb.video so this cmd will work on all videos and the output is only mltb so the extension is the same as input files.
-3. Third cmd: the input is mltb.m4a so this cmd will work only on m4a audios and the output is mltb.mp3 so the output extension is mp3.
+1. First cmd: the input is mltb.mkv so this cmd will work only on mkv videos and the output is mltb.mkv also so all outputs is mkv. -del will delete the original media after complete run of the cmd.
+2. Second cmd: the input is mltb.video so this cmd will work on all videos and the output is only mltb so the extenstion is same as input files.
+3. Third cmd: the input in mltb.m4a so this cmd will work only on m4a audios and the output is mltb.mp3 so the output extension is mp3.
 4. Fourth cmd: the input is mltb.audio so this cmd will work on all audios and the output is mltb.mp3 so the output extension is mp3.
 
 <i>Send dict of FFMPEG_CMDS Options according to format.</i> \n┖ <b>Time Left :</b> <code>60 sec</code>
@@ -207,7 +206,7 @@ Here I will explain how to use mltb.* which is reference to files you want to wo
     "METADATA_CMDS": (
         "",
         "",
-        """<i>Send your Meta data. You can set it according to the format title="Join @WZML_X".</i>
+        """<i>Send your Meta data. You can according to the format title="Join @WZML_X".</i>
 <b>Full Documentation Guide</b> <a href="https://t.me/WZML_X/">Click Here</a>
 ┖ <b>Time Left :</b> <code>60 sec</code>
 """,
@@ -325,33 +324,18 @@ Here I will explain how to use mltb.* which is reference to files you want to wo
     ),
     "VIKINGFILE_FOLDER": (
         "String",
-        "VikingFile folder name/path. Leave empty to upload to root.",
+        "VikingFile Folder Name",
         "<i>Send your VikingFile folder name/path. Leave empty to upload to root.</i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
-    ),
-    "MEGA_EMAIL": (
-        "String",
-        "Your Mega.nz account email for per-user Mega downloads & uploads.",
-        "<i>Send your Mega.nz email address.</i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
-    ),
-    "MEGA_PASSWORD": (
-        "String",
-        "Your Mega.nz account password for per-user Mega downloads & uploads.",
-        "<i>Send your Mega.nz account password.</i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
     ),
     "SEEDR_EMAIL": (
         "String",
-        "Your Seedr.cc account email for per-user Seedr cloud downloads.",
+        "Your Seedr.cc account email for personal magnet downloads.",
         "<i>Send your Seedr.cc email address.</i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
     ),
     "SEEDR_PASSWORD": (
         "String",
-        "Your Seedr.cc account password for per-user Seedr cloud downloads.",
+        "Your Seedr.cc account password for personal magnet downloads.",
         "<i>Send your Seedr.cc account password.</i> \n┖ <b>Time Left :</b> <code>60 sec</code>",
-    ),
-    "DRIVE_CAT": (
-        "Dict",
-        'User-defined GDrive categories (name → drive_id). Format: {"name": "drive_id|index_link"}.',
-        '<i>Send dict of user drive categories.\nExample: {"Movies": "0Bxxxxxxxx", "TV": "1Ayyyyyyy|https://index.tv"}\nEach value: drive_id or drive_id|index_link</i> \n┖ <b>Time Left :</b> <code>60 sec</code>',
     ),
 }
 
@@ -373,7 +357,7 @@ async def get_user_settings(from_user, stype="main"):
         buttons.data_button("Uphoster Settings", f"userset {user_id} uphoster")
         buttons.data_button("FF Media Settings", f"userset {user_id} ffset")
         buttons.data_button(
-            "Misc Settings", f"userset {user_id} advanced", position="l_body"
+            "Mics Settings", f"userset {user_id} advanced", position="l_body"
         )
 
         if user_dict and any(
@@ -382,9 +366,10 @@ async def get_user_settings(from_user, stype="main"):
             + [
                 "USER_TOKENS",
                 "AS_DOCUMENT",
-                "AUTO_THUMBNAIL",
                 "EQUAL_SPLITS",
                 "MEDIA_GROUP",
+                "USER_TRANSMISSION",
+                "HYBRID_LEECH",
                 "STOP_DUPLICATE",
                 "DEFAULT_UPLOAD",
             ]
@@ -439,14 +424,14 @@ async def get_user_settings(from_user, stype="main"):
             f"Swap to {'OWNER' if not def_cookies else 'USER'}'s Cookie File",
             f"userset {user_id} tog USE_DEFAULT_COOKIE {'f' if def_cookies else 't'}",
         )
-        btns = buttons.build_menu(2)
+        btns = buttons.build_menu(1)
 
         text = f"""⌬ <b>General Settings :</b>
 ┟ <b>Name</b> → {user_name}
 ┃
 ┠ <b>Default Upload Package</b> → <b>{du}</b>
 ┠ <b>Default Usage Mode</b> → <b>{tr}'s</b> token/config
-┖ <b>YT Cookies Mode</b> → <b>{cookie_mode}</b>
+┖ <b>yt Cookies Mode</b> → <b>{cookie_mode}</b>
 """
 
     elif stype == "leech":
@@ -465,8 +450,8 @@ async def get_user_settings(from_user, stype="main"):
         )
         if user_dict.get("LEECH_DUMP_CHAT", False):
             leech_dest = user_dict["LEECH_DUMP_CHAT"]
-        elif "LEECH_DUMP_CHAT" not in user_dict and Config.LEECH_LOG_CHAT:
-            leech_dest = Config.LEECH_LOG_CHAT
+        elif "LEECH_DUMP_CHAT" not in user_dict and Config.LEECH_DUMP_CHAT:
+            leech_dest = Config.LEECH_DUMP_CHAT
         else:
             leech_dest = "None"
         buttons.data_button("Leech Prefix", f"userset {user_id} menu LEECH_PREFIX")
@@ -533,19 +518,41 @@ async def get_user_settings(from_user, stype="main"):
             )
             media_group = "Disabled"
         if (
-            user_dict.get("AUTO_THUMBNAIL", False)
-            or "AUTO_THUMBNAIL" not in user_dict
-            and Config.AUTO_THUMBNAIL
+            TgClient.IS_PREMIUM_USER
+            and user_dict.get("USER_TRANSMISSION", False)
+            or "USER_TRANSMISSION" not in user_dict
+            and Config.USER_TRANSMISSION
         ):
             buttons.data_button(
-                "Disable Auto Thumbnail", f"userset {user_id} tog AUTO_THUMBNAIL f"
+                "Leech by Bot", f"userset {user_id} tog USER_TRANSMISSION f"
             )
-            auto_thumb = "Enabled"
-        else:
+            leech_method = "user"
+        elif TgClient.IS_PREMIUM_USER:
+            leech_method = "bot"
             buttons.data_button(
-                "Enable Auto Thumbnail", f"userset {user_id} tog AUTO_THUMBNAIL t"
+                "Leech by User", f"userset {user_id} tog USER_TRANSMISSION t"
             )
-            auto_thumb = "Disabled"
+        else:
+            leech_method = "bot"
+
+        if (
+            TgClient.IS_PREMIUM_USER
+            and user_dict.get("HYBRID_LEECH", False)
+            or "HYBRID_LEECH" not in user_dict
+            and Config.HYBRID_LEECH
+        ):
+            hybrid_leech = "Enabled"
+            buttons.data_button(
+                "Disable Hybride Leech", f"userset {user_id} tog HYBRID_LEECH f"
+            )
+        elif TgClient.IS_PREMIUM_USER:
+            hybrid_leech = "Disabled"
+            buttons.data_button(
+                "Enable HYBRID Leech", f"userset {user_id} tog HYBRID_LEECH t"
+            )
+        else:
+            hybrid_leech = "Disabled"
+
         buttons.data_button(
             "Thumbnail Layout", f"userset {user_id} menu THUMBNAIL_LAYOUT"
         )
@@ -566,7 +573,7 @@ async def get_user_settings(from_user, stype="main"):
 ┟ <b>Name</b> → {user_name}
 ┃
 ┠ Leech Type → <b>{ltype}</b>
-┠ Leech Thumbnail → <b>{thumbmsg}</b>
+┠ Custom Thumbnail → <b>{thumbmsg}</b>
 ┠ Leech Split Size → <b>{get_readable_file_size(split_size)}</b>
 ┠ Equal Splits → <b>{equal_splits}</b>
 ┠ Media Group → <b>{media_group}</b>
@@ -574,14 +581,16 @@ async def get_user_settings(from_user, stype="main"):
 ┠ Leech Suffix → <code>{escape(lsuffix)}</code>
 ┠ Leech Caption → <code>{escape(lcap)}</code>
 ┠ Leech Destination → <code>{leech_dest}</code>
-┠ Thumbnail Layout → <b>{thumb_layout}</b>
-┖ Auto Thumbnail → <b>{auto_thumb}</b>
+┠ Leech by <b>{leech_method}</b> session
+┠ Mixed Leech → <b>{hybrid_leech}</b>
+┖ Thumbnail Layout → <b>{thumb_layout}</b>
 """
 
     elif stype == "uphoster":
         uphoster_service = user_dict.get("UPHOSTER_SERVICE", "gofile")
         buttons.data_button(
-            "Change Destination ⇋", f"userset {user_id} uphoster_destinations", "header"
+            "Change Destination ⇋",
+            f"userset {user_id} uphoster_destinations",
         )
         buttons.data_button("Gofile Tools", f"userset {user_id} gofile")
         buttons.data_button("BuzzHeavier Tools", f"userset {user_id} buzzheavier")
@@ -592,7 +601,7 @@ async def get_user_settings(from_user, stype="main"):
         buttons.data_button(
             "Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
         )
-        btns = buttons.build_menu(2)
+        btns = buttons.build_menu(1)
 
         destinations = [s.capitalize() for s in uphoster_service.split(",")]
         text = f"""⌬ <b>Uphoster Settings :</b>
@@ -706,16 +715,6 @@ async def get_user_settings(from_user, stype="main"):
         buttons.data_button(
             "Gofile Folder ID", f"userset {user_id} menu GOFILE_FOLDER_ID"
         )
-        auto_create = (
-            user_dict.get("GOFILE_AUTO_CREATE_FOLDER")
-            if "GOFILE_AUTO_CREATE_FOLDER" in user_dict
-            else Config.GOFILE_AUTO_CREATE_FOLDER
-        )
-        auto_state = "✓" if auto_create else ""
-        buttons.data_button(
-            f"Auto-Create Folder {auto_state}",
-            f"userset {user_id} tog GOFILE_AUTO_CREATE_FOLDER {'t' if not auto_create else 'f'}",
-        )
         buttons.data_button("Back", f"userset {user_id} back uphoster", "footer")
         buttons.data_button(
             "Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
@@ -740,8 +739,7 @@ async def get_user_settings(from_user, stype="main"):
 ┟ <b>Name</b> → {user_name}
 ┃
 ┠ <b>Gofile Token</b> → <code>{gftoken}</code>
-┠ <b>Gofile Folder ID</b> → <code>{gffolder}</code>
-┖ <b>Auto-Create Folder</b> → <code>{"Enabled" if auto_create else "Disabled"}</code>"""
+┖ <b>Gofile Folder ID</b> → <code>{gffolder}</code>"""
 
     elif stype == "rclone":
         buttons.data_button("Rclone Config", f"userset {user_id} menu RCLONE_CONFIG")
@@ -762,7 +760,7 @@ async def get_user_settings(from_user, stype="main"):
             rccpath = Config.RCLONE_PATH
         else:
             rccpath = "None"
-        btns = buttons.build_menu(2)
+        btns = buttons.build_menu(1)
 
         if user_dict.get("RCLONE_FLAGS", False):
             rcflags = user_dict["RCLONE_FLAGS"]
@@ -779,9 +777,9 @@ async def get_user_settings(from_user, stype="main"):
 ┖ <b>Rclone Path</b> → <code>{rccpath}</code>"""
 
     elif stype == "gdrive":
+        buttons.data_button("token.pickle", f"userset {user_id} menu TOKEN_PICKLE")
         buttons.data_button("Default Gdrive ID", f"userset {user_id} menu GDRIVE_ID")
-        buttons.data_button("Default Index URL", f"userset {user_id} menu INDEX_URL")
-        buttons.data_button("Token.pickle", f"userset {user_id} menu TOKEN_PICKLE")
+        buttons.data_button("Index URL", f"userset {user_id} menu INDEX_URL")
         if (
             user_dict.get("STOP_DUPLICATE", False)
             or "STOP_DUPLICATE" not in user_dict
@@ -798,9 +796,6 @@ async def get_user_settings(from_user, stype="main"):
                 "l_body",
             )
             sd_msg = "Disabled"
-        buttons.data_button(
-            "User Drive Categories", f"userset {user_id} menu DRIVE_CAT", "header"
-        )
         buttons.data_button("Back", f"userset {user_id} back mirror", "footer")
         buttons.data_button(
             "Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
@@ -814,41 +809,15 @@ async def get_user_settings(from_user, stype="main"):
         else:
             gdrive_id = "None"
         index = user_dict["INDEX_URL"] if user_dict.get("INDEX_URL", False) else "None"
-        upload_sa = user_dict.get("DRIVE_CATEGORY_SA") or Config.DRIVE_CATEGORY_SA
-        sa_display = escape(upload_sa) if upload_sa else "Not Set"
-        dc_status = "Enabled" if user_dict.get("drive_cat_mode", False) else "Disabled"
-        if not Config.DRIVE_CATEGORY_MODE:
-            dc_status = "Force Disabled (Global)"
-        drive_cat_val = user_dict.get("DRIVE_CAT")
-        lines = []
-        default_ilink_part = (
-            f" | <code>{escape(index)}</code>" if index != "None" else ""
-        )
-        lines.append(
-            f"  <b>Default</b>: <code>{escape(gdrive_id)}</code>{default_ilink_part}"
-        )
-        if drive_cat_val:
-            for k, v in drive_cat_val.items():
-                did = v.get("drive_id", "")
-                ilink = v.get("index_link", "")
-                ilink_part = f" | <code>{escape(ilink)}</code>" if ilink else ""
-                lines.append(
-                    f"  <b>{escape(k)}</b>: <code>{escape(did)}</code>{ilink_part}"
-                )
-        drive_cat_display = "\n   ".join(lines)
         btns = buttons.build_menu(2)
 
         text = f"""⌬ <b>GDrive Tools Settings :</b>
 ┟ <b>Name</b> → {user_name}
 ┃
-┠ <b>Gdrive ID</b> → <code>{gdrive_id}</code> <i>(Default)</i>
-┠ <b>Index URL</b> → <code>{index}</code> <i>(Default)</i>
-┠ <b>Stop Duplicate</b> → <b>{sd_msg}</b>
-┠ <b>GDrive token.pickle</b> → <b>{tokenmsg}</b>
-┠ <b>Drive Upload SA</b> → <code>{sa_display}</code>
-┠ <b>Drive Category</b> → <b>{dc_status}</b>
-┖ <b>Drive Categories:</b> 
-   {drive_cat_display}"""
+┠ <b>Gdrive Token</b> → <b>{tokenmsg}</b>
+┠ <b>Gdrive ID</b> → <code>{gdrive_id}</code>
+┠ <b>Index URL</b> → <code>{index}</code>
+┖ <b>Stop Duplicate</b> → <b>{sd_msg}</b>"""
     elif stype == "mirror":
         buttons.data_button("RClone Tools", f"userset {user_id} rclone")
         rccmsg = "Exists" if await aiopath.exists(rclone_conf) else "Not Exists"
@@ -879,74 +848,27 @@ async def get_user_settings(from_user, stype="main"):
             sd_msg = "Disabled"
 
         buttons.data_button("YT Up Tools", f"userset {user_id} yttools")
-        buttons.data_button("Mega Tools", f"userset {user_id} mega")
-        if not Config.DISABLE_SEEDR:
-            buttons.data_button("Seedr Tools", f"userset {user_id} seedr")
-        if Config.DRIVE_CATEGORY_MODE:
-            dc_enabled = user_dict.get("drive_cat_mode", False)
-            buttons.data_button(
-                f"Drive Categories: {'ON' if dc_enabled else 'OFF'}",
-                f"userset {user_id} tog drive_cat_mode {'f' if dc_enabled else 't'}",
-                "header",
-            )
+        buttons.data_button("Seedr Tools", f"userset {user_id} seedr")
         buttons.data_button("Back", f"userset {user_id} back", "footer")
-        buttons.data_button(
-            "Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
-        )
-        btns = buttons.build_menu(2)
-
-        text = f"""⌬ <b>Mirror Settings :</b>
-┟ <b>Name</b> → {user_name}
-┃
-┖ <b>Bot Stop Duplicate</b> → <b>{sd_msg}</b>
-"""
-
-    elif stype == "mega":
-        mega_email = user_dict.get("MEGA_EMAIL", "")
-        mega_password = user_dict.get("MEGA_PASSWORD", "")
-        has_creds = bool(mega_email and mega_password)
-        masked_pass = (
-            (
-                mega_password[:2] + "*" * (len(mega_password) - 4) + mega_password[-2:]
-                if len(mega_password) > 6
-                else "****"
-            )
-            if mega_password
-            else ""
-        )
-
-        buttons.data_button("Mega Email", f"userset {user_id} menu MEGA_EMAIL")
-        if mega_email:
-            buttons.data_button(
-                "Mega Password", f"userset {user_id} menu MEGA_PASSWORD"
-            )
-
-        if has_creds:
-            buttons.data_button(
-                "Remove Account",
-                f"userset {user_id} remove MEGA_EMAIL",
-                position="l_body",
-            )
-
-        buttons.data_button("Back", f"userset {user_id} back mirror", "footer")
         buttons.data_button(
             "Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
         )
         btns = buttons.build_menu(1)
 
-        email_display = mega_email or "Not Set"
-        pass_display = masked_pass if mega_password else "Not Set"
-        account_status = "✓ Configured" if has_creds else "❌ Not Configured"
-        text = f"""⌬ <b>Mega Tools :</b>
+        text = f"""⌬ <b>Mirror Settings :</b>
 ┟ <b>Name</b> → {user_name}
 ┃
-┠ <b>Mega Email</b> → <code>{email_display}</code>
-┠ <b>Mega Password</b> → <code>{pass_display}</code>
-┖ <b>Account</b> → {account_status}"""
+┠ <b>Rclone Config</b> → <b>{rccmsg}</b>
+┠ <b>Rclone Path</b> → <code>{rccpath}</code>
+┠ <b>Gdrive Token</b> → <b>{tokenmsg}</b>
+┠ <b>Gdrive ID</b> → <code>{gdrive_id}</code>
+┠ <b>Index Link</b> → <code>{index}</code>
+┖ <b>Stop Duplicate</b> → <b>{sd_msg}</b>
+"""
 
     elif stype == "seedr":
         seedr_email = user_dict.get("SEEDR_EMAIL", "")
-        seedr_password = user_dict.get("SEEDR_PASSWORD", "")
+        seedr_password = decrypt_secret(user_dict.get("SEEDR_PASSWORD", ""))
         seedr_delete = (
             user_dict.get("SEEDR_DELETE_FOLDER")
             if "SEEDR_DELETE_FOLDER" in user_dict
@@ -971,20 +893,32 @@ async def get_user_settings(from_user, stype="main"):
                 "Seedr Password", f"userset {user_id} menu SEEDR_PASSWORD"
             )
 
+        del_state = "✓" if seedr_delete else ""
         buttons.data_button(
-            f"Delete Folder: {'ON' if seedr_delete else 'OFF'}",
+            f"Auto-Delete Cloud Folder {del_state}",
             f"userset {user_id} tog SEEDR_DELETE_FOLDER {'f' if seedr_delete else 't'}",
         )
 
+        space_disp = "<i>Not Configured (Using Global Account)</i>"
         if has_creds:
             buttons.data_button(
                 "Clear Storage",
                 f"userset {user_id} clear_seedr",
                 position="l_body",
             )
+            try:
+                sc = SeedrClient(seedr_email, seedr_password)
+                await sc.login()
+                s_max, s_used = await sc.get_space()
+                s_free = max(0, s_max - s_used)
+                space_disp = f"<code>{get_readable_file_size(s_free)} / {get_readable_file_size(s_max)} Free</code>"
+            except Exception as e:
+                space_disp = f"<i>Error ({escape(str(e))})</i>"
+
+        if has_creds:
             buttons.data_button(
-                "Remove Account",
-                f"userset {user_id} remove SEEDR_EMAIL",
+                "Reset Seedr Account",
+                f"userset {user_id} reset SEEDR_EMAIL",
                 position="l_body",
             )
 
@@ -992,19 +926,27 @@ async def get_user_settings(from_user, stype="main"):
         buttons.data_button(
             "Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
         )
-        btns = buttons.build_menu(1)
+        btns = buttons.build_menu(2)
 
-        email_display = seedr_email or "Not Set"
-        pass_display = masked_pass if seedr_password else "Not Set"
-        account_status = "✓ Configured" if has_creds else "❌ Not Configured"
-        delete_display = "Enabled" if seedr_delete else "Disabled"
+        email_disp = (
+            f"<code>{escape(seedr_email)}</code>"
+            if seedr_email
+            else "<i>Not Set (Uses Global)</i>"
+        )
+        pass_disp = (
+            f"<code>{escape(masked_pass)}</code>"
+            if masked_pass
+            else "<i>Not Set (Uses Global)</i>"
+        )
+        delete_disp = "Enabled" if seedr_delete else "Disabled"
+
         text = f"""⌬ <b>Seedr Tools :</b>
 ┟ <b>Name</b> → {user_name}
 ┃
-┠ <b>Seedr Email</b> → <code>{email_display}</code>
-┠ <b>Seedr Password</b> → <code>{pass_display}</code>
-┠ <b>Delete Folder</b> → {delete_display}
-┖ <b>Account</b> → {account_status}"""
+┠ <b>Seedr Email</b> → {email_disp}
+┠ <b>Seedr Password</b> → {pass_disp}
+┠ <b>Storage Space</b> → {space_disp}
+┖ <b>Auto-Delete Cloud Folder</b> → <b>{delete_disp}</b>"""
 
     elif stype == "ffset":
         buttons.data_button(
@@ -1020,7 +962,7 @@ async def get_user_settings(from_user, stype="main"):
         if isinstance(ffc, dict):
             ffc = "\n" + "\n".join(
                 [
-                    f"{no}. <b>{escape(str(key))}</b>: <code>{escape(str(value[0] if isinstance(value, (list, tuple)) and value else value))}</code>"
+                    f"{no}. <b>{key}</b>: <code>{escape(str(value[0]))}</code>"
                     for no, (key, value) in enumerate(ffc.items(), start=1)
                 ]
             )
@@ -1125,9 +1067,8 @@ async def get_user_settings(from_user, stype="main"):
         else:
             ytopt = "None"
 
-        if user_dict.get("UPLOAD_PATHS", False):
-            upload_paths = user_dict["UPLOAD_PATHS"]
-        elif "UPLOAD_PATHS" not in user_dict and Config.UPLOAD_PATHS:
+        upload_paths = user_dict.get("UPLOAD_PATHS", {})
+        if not upload_paths and "UPLOAD_PATHS" not in user_dict and Config.UPLOAD_PATHS:
             upload_paths = Config.UPLOAD_PATHS
         else:
             upload_paths = "None"
@@ -1145,12 +1086,12 @@ async def get_user_settings(from_user, stype="main"):
         buttons.data_button(
             "Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
         )
-        btns = buttons.build_menu(2)
+        btns = buttons.build_menu(1)
 
         text = f"""⌬ <b>Advanced Settings :</b>
 ┟ <b>Name</b> → {user_name}
 ┃
-┠ <b>Auto Name Swaps</b> → {ns_msg}
+┠ <b>Name Swaps</b> → {ns_msg}
 ┠ <b>Excluded Extensions</b> → <code>{ex_ex}</code>
 ┠ <b>Blacklisted Keywords</b> → <code>{bl_kw}</code>
 ┠ <b>Upload Paths</b> → <b>{upload_paths}</b>
@@ -1251,17 +1192,6 @@ async def add_file(_, message, ftype, rfunc):
     await database.update_user_doc(user_id, ftype, des_dir)
 
 
-def validate_ffmpeg_cmds(value):
-    for key, cmds in value.items():
-        if not isinstance(cmds, (list, tuple)) or not cmds:
-            raise ValueError(f"'{key}' must be a non-empty list of command strings")
-        for cmd in cmds:
-            if not isinstance(cmd, str) or not cmd.strip():
-                raise ValueError(f"'{key}' has an empty or non-string command")
-            if "-i" not in cmd.split():
-                raise ValueError(f"'{key}' has a command without an -i input: {cmd}")
-
-
 @new_task
 async def add_one(_, message, option, rfunc):
     user_id = message.from_user.id
@@ -1270,24 +1200,8 @@ async def add_one(_, message, option, rfunc):
     value = message.text
     if value.startswith("{") and value.endswith("}"):
         try:
-            value = literal_eval(value)
-            if not isinstance(value, dict):
-                raise ValueError("Expected a dict")
-            if option == "DRIVE_CAT":
-                parsed = {}
-                for k, v in value.items():
-                    if k.strip().casefold() == "default":
-                        raise ValueError(
-                            '"Default" is reserved and cannot be used as a category name'
-                        )
-                    parts = str(v).split("|", 1)
-                    did = parts[0].strip()
-                    ilink = parts[1].strip() if len(parts) > 1 else ""
-                    parsed[k.strip()] = {"drive_id": did, "index_link": ilink}
-                value = parsed
-            elif option == "FFMPEG_CMDS":
-                validate_ffmpeg_cmds(value)
-            if user_dict.get(option):
+            value = eval(value)
+            if user_dict[option]:
                 user_dict[option].update(value)
             else:
                 update_user_ldata(user_id, option, value)
@@ -1307,11 +1221,10 @@ async def remove_one(_, message, option, rfunc):
     user_id = message.from_user.id
     handler_dict[user_id] = False
     user_dict = user_data.get(user_id, {})
-    names = [name.strip() for name in message.text.split("/") if name.strip()]
-    opt_dict = user_dict.get(option)
-    if isinstance(opt_dict, dict):
-        for name in names:
-            opt_dict.pop(name, None)
+    names = message.text.split("/")
+    for name in names:
+        if name in user_dict[option]:
+            del user_dict[option][name]
     await delete_message(message)
     await rfunc()
     await database.update_user_data(user_id)
@@ -1401,32 +1314,18 @@ async def set_option(_, message, option, rfunc):
         else:
             value = {}
 
-    elif option in ["UPLOAD_PATHS", "FFMPEG_CMDS", "YT_DLP_OPTIONS", "DRIVE_CAT"]:
+    elif option in ["UPLOAD_PATHS", "FFMPEG_CMDS", "YT_DLP_OPTIONS"]:
         if value.startswith("{") and value.endswith("}"):
             try:
-                value = literal_eval(sub(r"\s+", " ", value))
-                if not isinstance(value, dict):
-                    raise ValueError("Expected a dict")
-                if option == "DRIVE_CAT":
-                    parsed = {}
-                    for k, v in value.items():
-                        if k.strip().casefold() == "default":
-                            raise ValueError(
-                                '"Default" is reserved and cannot be used as a category name'
-                            )
-                        parts = str(v).split("|", 1)
-                        did = parts[0].strip()
-                        ilink = parts[1].strip() if len(parts) > 1 else ""
-                        parsed[k.strip()] = {"drive_id": did, "index_link": ilink}
-                    value = parsed
-                elif option == "FFMPEG_CMDS":
-                    validate_ffmpeg_cmds(value)
+                value = eval(sub(r"\s+", " ", value))
             except Exception as e:
                 await send_message(message, str(e))
                 return
         else:
             await send_message(message, "It must be dict!")
             return
+    if option == "SEEDR_PASSWORD":
+        value = encrypt_secret(value)
     update_user_ldata(user_id, option, value)
     await delete_message(message)
     await rfunc()
@@ -1458,7 +1357,7 @@ async def get_menu(option, message, user_id):
             buttons.data_button(
                 "View Thumb", f"userset {user_id} view THUMBNAIL", "header"
             )
-        elif option in ["YT_DLP_OPTIONS", "FFMPEG_CMDS", "UPLOAD_PATHS", "DRIVE_CAT"]:
+        elif option in ["YT_DLP_OPTIONS", "FFMPEG_CMDS", "UPLOAD_PATHS"]:
             buttons.data_button(
                 "Add One", f"userset {user_id} addone {option}", "header"
             )
@@ -1482,10 +1381,6 @@ async def get_menu(option, message, user_id):
         back_to = "ffset"
     elif option in advanced_options:
         back_to = "advanced"
-    elif option in uphoster_options:
-        back_to = option.split("_")[0].lower()
-    elif option in mega_options:
-        back_to = "mega"
     elif option in seedr_options:
         back_to = "seedr"
     else:
@@ -1515,27 +1410,6 @@ async def get_menu(option, message, user_id):
 
         if val is None:
             val = "<b>Not Exists</b>"
-
-    elif option == "DRIVE_CAT":
-        default_id = user_dict.get("GDRIVE_ID") or Config.GDRIVE_ID
-        default_index = user_dict.get("INDEX_URL") or Config.INDEX_URL
-        lines = [f"  <b>Default</b>: <code>{escape(str(default_id))}</code>"]
-        if default_index:
-            lines[0] += f" | <code>{escape(default_index)}</code>"
-        if isinstance(val, dict):
-            for k, v in val.items():
-                did = v.get("drive_id", "")
-                ilink = v.get("index_link", "")
-                ilink_part = f" | <code>{escape(ilink)}</code>" if ilink else ""
-                lines.append(
-                    f"  <b>{escape(k)}</b>: <code>{escape(did)}</code>{ilink_part}"
-                )
-            val = "\n   ".join(lines)
-        elif not val:
-            val = "<b>Not Exists</b>"
-
-    elif option in ["FFMPEG_CMDS", "YT_DLP_OPTIONS", "UPLOAD_PATHS"]:
-        val = f"<code>{escape(str(val))}</code>" if val else "<b>Not Exists</b>"
 
     if option == "METADATA":
         text = f"""⌬ <b><u>Menu Settings :</u></b>
@@ -1638,52 +1512,32 @@ async def edit_user_settings(client, query):
         "advanced",
         "gdrive",
         "rclone",
+        "seedr",
     ]:
         await query.answer()
         await update_user_settings(query, data[2])
-    elif data[2] == "mega":
+    elif data[2] == "yttools":
         await query.answer()
-        msg, button = await get_user_settings(query.from_user, "mega")
-        await edit_message(message, msg, button)
-        mega_email = user_dict.get("MEGA_EMAIL", "")
-        mega_password = user_dict.get("MEGA_PASSWORD", "")
-        if mega_email and mega_password:
-            info_text = await get_mega_account_info(mega_email, mega_password)
-            msg += f"\n\n{info_text}"
-            await edit_message(message, msg, button)
-    elif data[2] == "seedr":
-        await query.answer()
-        msg, button = await get_user_settings(query.from_user, "seedr")
-        await edit_message(message, msg, button)
-        seedr_email = user_dict.get("SEEDR_EMAIL", "")
-        seedr_password = user_dict.get("SEEDR_PASSWORD", "")
-        if seedr_email and seedr_password:
-            try:
-                sc = SeedrClient(seedr_email, seedr_password)
-                await sc.login()
-                space_max, space_used = await sc.get_space()
-                msg += f"\n\n<b>Seedr Space</b> → <code>{get_readable_file_size(space_used)} / {get_readable_file_size(space_max)}</code>"
-            except Exception as e:
-                msg += f"\n\n<b>Seedr Login Failed:</b> {escape(str(e))}"
-            await edit_message(message, msg, button)
+        await update_user_settings(query, data[2])
     elif data[2] == "clear_seedr":
         await query.answer("Clearing Seedr Storage...", show_alert=False)
-        seedr_email = user_dict.get("SEEDR_EMAIL", "")
-        seedr_password = user_dict.get("SEEDR_PASSWORD", "")
+        seedr_email = user_dict.get("SEEDR_EMAIL") or Config.SEEDR_EMAIL
+        seedr_password = (
+            decrypt_secret(user_dict.get("SEEDR_PASSWORD")) or Config.SEEDR_PASSWORD
+        )
         if seedr_email and seedr_password:
             try:
                 from .mirror_leech import clear_seedr_account
 
                 t_c, f_c = await clear_seedr_account(seedr_email, seedr_password)
                 await query.answer(
-                    f"Removed {t_c} torrent(s) and {f_c} folder(s)!", show_alert=True
+                    f"Cleared {t_c} torrents & {f_c} folders!", show_alert=True
                 )
             except Exception as e:
-                await query.answer(f"Failed: {e}"[:180], show_alert=True)
+                await query.answer(f"Error: {e}", show_alert=True)
+        else:
+            await query.answer("No credentials configured!", show_alert=True)
         await update_user_settings(query, "seedr")
-    elif data[2] == "yttools":
-        await query.answer()
-        await update_user_settings(query, data[2])
     elif data[2] == "uphoster_destinations":
         await query.answer()
         user_dict = user_data.get(user_id, {})
@@ -1730,7 +1584,7 @@ async def edit_user_settings(client, query):
         )
 
         text = """⌬ <b>Select Uphoster Destinations :</b>"""
-        await edit_message(message, text, buttons.build_menu(2))
+        await edit_message(message, text, buttons.build_menu(1))
     elif data[2] == "menu":
         await query.answer()
         await get_menu(data[3], message, user_id)
@@ -1739,12 +1593,8 @@ async def edit_user_settings(client, query):
         update_user_ldata(user_id, data[3], data[4] == "t")
         if data[3] == "STOP_DUPLICATE":
             back_to = "gdrive"
-        elif data[3] == "drive_cat_mode":
-            back_to = "mirror"
         elif data[3] in ["USER_TOKENS", "USE_DEFAULT_COOKIE"]:
             back_to = "general"
-        elif data[3] == "GOFILE_AUTO_CREATE_FOLDER":
-            back_to = "gofile"
         elif data[3] == "SEEDR_DELETE_FOLDER":
             back_to = "seedr"
         else:
@@ -1818,15 +1668,13 @@ async def edit_user_settings(client, query):
             await database.update_user_doc(user_id, data[3])
         else:
             update_user_ldata(user_id, data[3], "")
-            if data[3] == "MEGA_EMAIL":
-                update_user_ldata(user_id, "MEGA_PASSWORD", "")
-            elif data[3] == "SEEDR_EMAIL":
-                update_user_ldata(user_id, "SEEDR_PASSWORD", "")
             await database.update_user_data(user_id)
         await get_menu(data[3], message, user_id)
     elif data[2] == "reset":
         await query.answer("Reset Done!", show_alert=True)
         user_dict.pop(data[3], None)
+        if data[3] == "SEEDR_EMAIL":
+            user_dict.pop("SEEDR_PASSWORD", None)
         await database.update_user_data(user_id)
         await get_menu(data[3], message, user_id)
     elif data[2] == "confirm_reset_all":

@@ -24,8 +24,8 @@ class PixelDrainUpload(BaseUpload):
     _TOKEN_KEY = "PIXELDRAIN_KEY"
     _CONFIG_KEY = "PIXELDRAIN_KEY"
 
-    def __init__(self, listener, path, folder_name=""):
-        super().__init__(listener, path, folder_name)
+    def __init__(self, listener, path):
+        super().__init__(listener, path)
         self.api_url = "https://pixeldrain.com/api/"
 
     async def __resp_handler(self, response):
@@ -66,7 +66,7 @@ class PixelDrainUpload(BaseUpload):
         auth = BasicAuth("", self.token)
         async with ClientSession(auth=auth) as session:
             async with session.post(f"{self.api_url}list", json=data) as resp:
-                if resp.status in [200, 201]:
+                if resp.status == 200:
                     res = await resp.json(content_type=None)
                     if res.get("success"):
                         return res.get("id")
@@ -102,7 +102,7 @@ class PixelDrainUpload(BaseUpload):
             raise Exception("No files uploaded from directory.")
         list_id = await self.create_list(folder_name, uploaded_files)
         if list_id:
-            return f"l/{list_id}"
+            return f"list/{list_id}"
         else:
             return f"u/{uploaded_files[0]['id']}"
 

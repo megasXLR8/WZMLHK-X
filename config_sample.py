@@ -4,7 +4,6 @@ OWNER_ID = 0
 TELEGRAM_API = 0
 TELEGRAM_HASH = ""
 DATABASE_URL = ""
-KUMA_URL = ""
 
 # OPTIONAL CONFIG
 DEFAULT_LANG = "en"
@@ -18,56 +17,33 @@ DEFAULT_UPLOAD = "rc"
 STATUS_UPDATE_INTERVAL = 15
 FILELION_API = ""
 STREAMWISH_API = ""
-ALLDEBRID_API_KEY = ""
-ALLDEBRID_NO_SEED_TIMEOUT = 180
 EXCLUDED_EXTENSIONS = ""
 BLACKLISTED_KEYWORDS = (
-    "hdcam camrip hdtc hdts predvd hc-hd 2160phd 1080phd 720phd hd-cam cam-rip telesync"
+    "hdcam camrip hdtc hdts predvd hc-hd 2160phd 1080phd 720phd hd-cam cam-rip"
 )
-INC_TASK_NOTIFY = False
-INC_TASK_RESUME = False
+INCOMPLETE_TASK_NOTIFIER = False
+INCOMPLETE_TASK_RESUME = False
 YT_DLP_OPTIONS = ""
 USE_SERVICE_ACCOUNTS = False
 NAME_SWAP = ""
 FFMPEG_CMDS = {}
 UPLOAD_PATHS = {}
-WEB_ACCESS_PASSWORD = (
-    ""  # Secret for deriving proxy passwords. Logs derived passwords at startup.
-)
 
 # Hyper Tg Downloader
 HELPER_TOKENS = ""
-STREAM_TOKENS = ""
-USE_HYPER = True
 
 # MegaAPI v4.30
 MEGA_EMAIL = ""
 MEGA_PASSWORD = ""
-DISABLE_MEGA = False
 
 # Disable Options
 DISABLE_TORRENTS = False
 DISABLE_LEECH = False
-DISABLE_MIRROR = False
 DISABLE_BULK = False
 DISABLE_MULTI = False
 DISABLE_SEED = False
-DISABLE_FF_MODE = False
-DISABLE_JD = False
-DISABLE_NZB = False
 DISABLE_SEEDR = False
-DISABLE_RSS = False
-DISABLE_SEARCH = False
-DISABLE_STREAM = False
-DISABLE_YTDLP = False
-DISABLE_PLUGINS = False
-
-# Plugins
-PLUGIN_INDEXES = []
-
-# Memory
-MEM_BUDGET = 0
-MEM_DEEP_STATS = False
+DISABLE_FF_MODE = False
 
 # Telegraph
 AUTHOR_NAME = "WZML-X"
@@ -89,27 +65,6 @@ LEECH_LIMIT = 0
 EXTRACT_LIMIT = 0
 ARCHIVE_LIMIT = 0
 STORAGE_LIMIT = 0
-MONTHLY_BANDWIDTH = 0
-
-# Percentage of currently free storage available to staged torrent batches (1-100).
-STAGED_TORRENT_STORAGE_PERCENT = 50
-
-# CPU limit for background services (SABnzbd, JDownloader). Default: 20
-CPU_LIMIT = 20
-
-# CPUs given to FFmpeg. auto=60% of them, all/0=every CPU, a count like 5,
-# a percentage like 75%, or an explicit taskset list like 0-4 / 0,1,2,3.
-# Background services get whatever is left over.
-FFMPEG_CORES = "auto"
-
-# Throttle services during heavy ops (FFmpeg). auto=low-end only, always, never
-THROTTLE_SERVICES = "auto"
-
-# Image Search
-USE_IMAGES = False
-IMG_SEARCH = ""
-IMG_PAGE = 1
-IMG_SOURCES = ["wallpaperflare"]
 
 # Insta video downloader api
 INSTADL_API = ""
@@ -119,14 +74,24 @@ HYDRA_IP = ""
 HYDRA_API_KEY = ""
 
 # Media Search
-# Optional: Set IMDB_TEMPLATE to use old HTML format instead of Rich Messages.
-# If empty (default), IMDb uses Rich Messages with tables and collapsible sections.
-IMDB_TEMPLATE = ""
+IMDB_TEMPLATE = """<b>Title: </b> {title} [{year}]
+<b>Also Known As:</b> {aka}
+<b>Rating ⭐️:</b> <i>{rating}</i>
+<b>Release Info: </b> <a href="{url_releaseinfo}">{release_date}</a>
+<b>Genre: </b>{genres}
+<b>IMDb URL:</b> {url}
+<b>Language: </b>{languages}
+<b>Country of Origin : </b> {countries}
+
+<b>Story Line: </b><code>{plot}</code>
+
+<a href="{url_cast}">Read More ...</a>"""
 
 # Task Tools
 FORCE_SUB_IDS = ""
 MEDIA_STORE = True
 DELETE_LINKS = False
+CLEAN_LOG_MSG = False
 
 # Limiters
 BOT_MAX_TASKS = 0
@@ -134,9 +99,6 @@ USER_MAX_TASKS = 0
 USER_TIME_INTERVAL = 0
 VERIFY_TIMEOUT = 0
 LOGIN_PASS = ""
-
-# Crash Reporting
-ENABLE_TELEMETRY = True  # Send crash reports to remote worker
 
 # Bot Settings
 BOT_PM = False
@@ -176,6 +138,12 @@ REMOTE_BASE_PATH = ""
 JD_EMAIL = ""
 JD_PASS = ""
 
+# Seedr (magnet mirroring via seedr.cc)
+SEEDR_EMAIL = ""
+SEEDR_PASSWORD = ""
+# Delete the folder from Seedr after the files are downloaded locally. Default: False
+SEEDR_DELETE_FOLDER = False
+
 # Sabnzbd
 USENET_SERVERS = [
     {
@@ -200,36 +168,31 @@ USENET_SERVERS = [
 
 # Update
 UPSTREAM_REPO = ""
-UPSTREAM_BRANCH = "wzv3"
+UPSTREAM_BRANCH = "master"
+UPDATE_PKGS = True
+
 # Leech
 LEECH_SPLIT_SIZE = 0
 AS_DOCUMENT = False
 EQUAL_SPLITS = False
 MEDIA_GROUP = False
-TRANSMISSION_MODE = "both"
+USER_TRANSMISSION = True
+HYBRID_LEECH = True
 LEECH_PREFIX = ""
 LEECH_SUFFIX = ""
 LEECH_FONT = ""
 LEECH_CAPTION = ""
 THUMBNAIL_LAYOUT = ""
-TMDB_ACCESS_TOKEN = ""
-AUTO_THUMBNAIL = False
 
 # Log Channels
-LEECH_LOG_CHAT = ""
-# Named leech dump chats, selectable per task with the -ud flag.
-# The chosen chat becomes the primary upload destination for the task.
-# Format: {"name": chat_id}
-LEECH_DUMP_CHATS = {
-    # "A": -1001234567890,
-    # "B": -1009876543210,
-}
+LEECH_DUMP_CHAT = ""
 LINKS_LOG_ID = ""
 MIRROR_LOG_ID = ""
 
 # qBittorrent/Aria2c
 TORRENT_TIMEOUT = 0
 BASE_URL = ""
+BASE_URL_PORT = 0
 WEB_PINCODE = True
 
 # Queueing system
@@ -264,8 +227,3 @@ SEARCH_PLUGINS = [
     "https://raw.githubusercontent.com/msagca/qbittorrent_plugins/main/uniondht.py",
     "https://raw.githubusercontent.com/khensolomon/leyts/master/yts.py",
 ]
-
-# Seedr (magnet mirroring via seedr.cc)
-SEEDR_EMAIL = ""
-SEEDR_PASSWORD = ""
-SEEDR_DELETE_FOLDER = False

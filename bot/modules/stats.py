@@ -24,15 +24,8 @@ from psutil import (
 
 from .. import LOGGER, bot_cache, bot_start_time, bot_loop
 from ..core.config_manager import Config, BinConfig
-from ..helper.ext_utils.bot_lock import get_system_resources_cached
-from ..helper.ext_utils.bot_utils import (
-    cmd_exec,
-    compare_versions,
-    git_info,
-    new_task,
-)
+from ..helper.ext_utils.bot_utils import cmd_exec, compare_versions, new_task
 from ..helper.ext_utils.status_utils import (
-    get_bandwidth_string,
     get_progress_bar_string,
     get_readable_file_size,
     get_readable_time,
@@ -62,7 +55,7 @@ commands = {
     ),
     "7z": (["7z", "i"], r"7-Zip ([\d.]+)"),
     "aiohttp": (["uv", "pip", "show", "aiohttp"], r"Version: ([\d.]+)"),
-    "wzgram": (["uv", "pip", "show", "wzgram"], r"Version: ([\d.]+)"),
+    "pyrotgfork": (["uv", "pip", "show", "pyrotgfork"], r"Version: ([\d.]+)"),
     "gapi": (["uv", "pip", "show", "google-api-python-client"], r"Version: ([\d.]+)"),
     "mega": (
         [
@@ -103,7 +96,6 @@ async def get_stats(event, key="home"):
             )[0]
         msg = f"""⌬ <b><i>BOT STATISTICS :</i></b>
 ┎ <b>Bot Uptime :</b> {get_readable_time(time() - bot_start_time)}
-┠ <b>Bandwidth :</b> {get_bandwidth_string()}
 ┖ <b>Used :</b> {get_readable_file_size(used)} | <b>Free :</b> {get_readable_file_size(free)} | <b>Total :</b> {get_readable_file_size(total)}
 
 ⌬ <b><i>SYSTEM OS :</i></b>
@@ -121,29 +113,10 @@ async def get_stats(event, key="home"):
         swap = swap_memory()
         memory = virtual_memory()
         disk_io = disk_io_counters()
-        res = get_system_resources_cached()
-        bot_ram_mb = res["ram_mb"]
-        bot_ram_total = bot_ram_mb * 1024 * 1024
-        user = Process().username()
-        bot_ram_used = sum(
-            p.memory_info().rss for p in process_iter() if p.username() == user
-        )
-        bot_ram_free = max(0, bot_ram_total - bot_ram_used)
-        bot_ram_pct = (
-            round((bot_ram_used / bot_ram_total * 100), 2) if bot_ram_total > 0 else 0
-        )
-        instance_cpu = res["cpu_count"]
-        sys_cpu = cpu_count(logical=True)
-        p_cores = cpu_count(logical=False)
-        v_cores = (sys_cpu or 0) - (p_cores or 0)
         msg = f"""⌬ <b><i>BOT STATISTICS :</i></b>
 ┖ <b>Bot Uptime :</b> {get_readable_time(time() - bot_start_time)}
 
-┎ <b><i>INSTANCE RAM ( BOT ) :</i></b>
-┃ {get_progress_bar_string(bot_ram_pct)} {bot_ram_pct}%
-┖ <b>U :</b> {get_readable_file_size(bot_ram_used)} | <b>F :</b> {get_readable_file_size(bot_ram_free)} | <b>T :</b> {get_readable_file_size(bot_ram_total)}
-
-┎ <b><i>SYSTEM RAM :</i></b>
+┎ <b><i>RAM ( MEMORY ) :</i></b>
 ┃ {get_progress_bar_string(memory.percent)} {memory.percent}%
 ┖ <b>U :</b> {get_readable_file_size(memory.used)} | <b>F :</b> {get_readable_file_size(memory.available)} | <b>T :</b> {get_readable_file_size(memory.total)}
 
@@ -151,12 +124,7 @@ async def get_stats(event, key="home"):
 ┃ {get_progress_bar_string(swap.percent)} {swap.percent}%
 ┖ <b>U :</b> {get_readable_file_size(swap.used)} | <b>F :</b> {get_readable_file_size(swap.free)} | <b>T :</b> {get_readable_file_size(swap.total)}
 
-┎ <b><i>INSTANCE CPU ( BOT ) :</i></b>
-┃ <b>Instance Core(s) :</b> {instance_cpu}
-┠ <b>Total Core(s) :</b> {sys_cpu} | <b>P-Core(s) :</b> {p_cores} | <b>V-Core(s) :</b> {v_cores}
-┖ <b>Usable CPU(s) :</b> {len(Process().cpu_affinity())}
-
-┎ <b><i>SYSTEM DISK :</i></b>
+┎ <b><i>DISK :</i></b>
 ┃ {get_progress_bar_string(disk)} {disk}%
 ┃ <b>Total Disk Read :</b> {f"{get_readable_file_size(disk_io.read_bytes)} ({get_readable_time(disk_io.read_time / 1000)})" if disk_io else "Access Denied"}
 ┃ <b>Total Disk Write :</b> {f"{get_readable_file_size(disk_io.write_bytes)} ({get_readable_time(disk_io.write_time / 1000)})" if disk_io else "Access Denied"}
@@ -164,35 +132,40 @@ async def get_stats(event, key="home"):
 """
     elif key == "stsys":
         cpu_usage = cpu_percent(interval=0.5)
-        sys_cpu = cpu_count(logical=True)
-        p_cores = cpu_count(logical=False)
-        v_cores = (sys_cpu or 0) - (p_cores or 0)
-        msg = f"""⌬ <b><i>SYSTEM OS :</i></b>
-╟ <b>OS Uptime :</b> {get_readable_time(time() - boot_time())}
+        msg = f"""⌬ <b><i>OS SYSTEM :</i></b>
+┟ <b>OS Uptime :</b> {get_readable_time(time() - boot_time())}
 ┠ <b>OS Version :</b> {version()}
 ┖ <b>OS Arch :</b> {platform()}
 
-⌬ <b><i>SYSTEM NETWORK :</i></b>
-╟ <b>Upload Data:</b> {get_readable_file_size(net_io_counters().bytes_sent)}
+⌬ <b><i>NETWORK STATS :</i></b>
+┟ <b>Upload Data:</b> {get_readable_file_size(net_io_counters().bytes_sent)}
 ┠ <b>Download Data:</b> {get_readable_file_size(net_io_counters().bytes_recv)}
 ┠ <b>Pkts Sent:</b> {str(net_io_counters().packets_sent)[:-3]}k
 ┠ <b>Pkts Received:</b> {str(net_io_counters().packets_recv)[:-3]}k
-┠ <b>Total I/O Data:</b> {get_readable_file_size(net_io_counters().bytes_recv + net_io_counters().bytes_sent)}
-┖ <b>Bandwidth:</b> {get_bandwidth_string()}
+┖ <b>Total I/O Data:</b> {get_readable_file_size(net_io_counters().bytes_recv + net_io_counters().bytes_sent)}
 
-┎ <b><i>SYSTEM CPU :</i></b>
+┎ <b>CPU :</b>
 ┃ {get_progress_bar_string(cpu_usage)} {cpu_usage}%
 ┠ <b>CPU Frequency :</b> {f"{cpu_freq().current / 1000:.2f} GHz" if cpu_freq() else "Access Denied"}
-┠ <b>System Avg Load :</b> {"%, ".join(str(round((x / (cpu_count() or 1) * 100), 2)) for x in getloadavg())}%, (1m, 5m, 15m)
-┠ <b>P-Core(s) :</b> {p_cores} | <b>V-Core(s) :</b> {v_cores}
-┠ <b>Total Core(s) :</b> {sys_cpu}
+┠ <b>System Avg Load :</b> {"%, ".join(str(round((x / cpu_count() * 100), 2)) for x in getloadavg())}%, (1m, 5m, 15m)
+┠ <b>P-Core(s) :</b> {cpu_count(logical=False)} | <b>V-Core(s) :</b> {cpu_count(logical=True) - cpu_count(logical=False)}
+┠ <b>Total Core(s) :</b> {cpu_count(logical=True)}
 ┖ <b>Usable CPU(s) :</b> {len(Process().cpu_affinity())}
 """
     elif key == "strepo":
-        last_commit = git_info.commit_date() or "No Data"
-        changelog = git_info.commit_msg() or "N/A"
-        if git_info.commit_hash() != "unknown":
-            changelog += f" | <code>{git_info.commit_hash()}</code>"
+        last_commit, changelog = "No Data", "N/A"
+        if await aiopath.exists(".git"):
+            last_commit = (
+                await cmd_exec(
+                    "git log -1 --pretty='%cd ( %cr )' --date=format-local:'%d/%m/%Y'",
+                    True,
+                )
+            )[0]
+            changelog = (
+                await cmd_exec(
+                    "git log -1 --pretty=format:'<code>%s</code> <b>By</b> %an'", True
+                )
+            )[0]
         official_v = (
             await cmd_exec(
                 f"curl -o latestversion.py https://raw.githubusercontent.com/SilentDemonSD/WZML-X/{Config.UPSTREAM_BRANCH}/bot/version.py -s && python3 latestversion.py && rm latestversion.py",
@@ -212,18 +185,18 @@ async def get_stats(event, key="home"):
         ver = bot_cache.get("eng_versions", {})
         msg = f"""⌬ <b><i>Packages Statistics :</i></b>
 │
-┟ <b>python:</b> v{ver.get("python", "N/A")}
-┠ <b>aria2:</b> v{ver.get("aria2", "N/A")}
-┠ <b>qBittorrent:</b> v{ver.get("qBittorrent", "N/A")}
-┠ <b>SABnzbd+:</b> v{ver.get("SABnzbd+", "N/A")}
-┠ <b>rclone:</b> v{ver.get("rclone", "N/A")}
-┠ <b>yt-dlp:</b> v{ver.get("yt-dlp", "N/A")}
-┠ <b>ffmpeg:</b> v{ver.get("ffmpeg", "N/A")}
-┠ <b>7z:</b> v{ver.get("7z", "N/A")}
-┠ <b>Aiohttp:</b> v{ver.get("aiohttp", "N/A")}
-┠ <b>WzGram:</b> v{ver.get("wzgram", "N/A")}
-┠ <b>Google API:</b> v{ver.get("gapi", "N/A")}
-┖ <b>MegaSDK:</b> v{ver.get("mega", "N/A")}
+┟ <b>python:</b> {ver.get("python", "N/A")}
+┠ <b>aria2:</b> {ver.get("aria2", "N/A")}
+┠ <b>qBittorrent:</b> {ver.get("qBittorrent", "N/A")}
+┠ <b>SABnzbd+:</b> {ver.get("SABnzbd+", "N/A")}
+┠ <b>rclone:</b> {ver.get("rclone", "N/A")}
+┠ <b>yt-dlp:</b> {ver.get("yt-dlp", "N/A")}
+┠ <b>ffmpeg:</b> {ver.get("ffmpeg", "N/A")}
+┠ <b>7z:</b> {ver.get("7z", "N/A")}
+┠ <b>Aiohttp:</b> {ver.get("aiohttp", "N/A")}
+┠ <b>PyroTgFork:</b> {ver.get("pyrotgfork", "N/A")}
+┠ <b>Google API:</b> {ver.get("gapi", "N/A")}
+┖ <b>Mega CMD:</b> {ver.get("mega", "N/A")}
 """
     elif key == "tlimits":
         msg = f"""⌬ <b><i>Bot Task Limits :</i></b>
@@ -241,8 +214,7 @@ async def get_stats(event, key="home"):
 ┠ <b>Leech Limit :</b> {Config.LEECH_LIMIT or "∞"} GB
 ┠ <b>Archive Limit :</b> {Config.ARCHIVE_LIMIT or "∞"} GB
 ┠ <b>Extract Limit :</b> {Config.EXTRACT_LIMIT or "∞"} GB
-┠ <b>Threshold Storage :</b> {Config.STORAGE_LIMIT or "∞"} GB
-┞ <b>Monthly Bandwidth :</b> {f"{Config.MONTHLY_BANDWIDTH} GB" if Config.MONTHLY_BANDWIDTH else "∞"}
+┞ <b>Threshold Storage :</b> {Config.STORAGE_LIMIT or "∞"} GB
 │
 ┟ <b>Token Validity :</b> {get_readable_time(Config.VERIFY_TIMEOUT) if Config.VERIFY_TIMEOUT else "Disabled"}
 ┠ <b>User Time Limit :</b> {Config.USER_TIME_INTERVAL or "0"}s / task
@@ -299,7 +271,7 @@ async def get_stats(event, key="home"):
 @new_task
 async def bot_stats(_, message):
     msg, btns = await get_stats(message)
-    await send_message(message, msg, btns, photo="IMAGES")
+    await send_message(message, msg, btns)
 
 
 @new_task

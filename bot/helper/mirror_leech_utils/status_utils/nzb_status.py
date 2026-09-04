@@ -1,7 +1,7 @@
 from asyncio import gather
 from collections import defaultdict
 
-from .... import LOGGER, sabnzbd_client
+from .... import LOGGER, sabnzbd_client, nzb_jobs, nzb_listener_lock
 from ...ext_utils.status_utils import (
     MirrorStatus,
     EngineStatus,
@@ -9,7 +9,6 @@ from ...ext_utils.status_utils import (
     get_readable_time,
     time_to_seconds,
 )
-from ...listeners.nzb_listener import _remove_job
 
 
 async def get_download(nzo_id, old_info=None):
@@ -38,17 +37,17 @@ async def get_download(nzo_id, old_info=None):
             if res := history["history"]["slots"]:
                 slot = res[0]
                 if slot["status"] == "Verifying":
-                    parts = slot["action_line"].split("Verifying: ")[-1].split("/")
-                    if len(parts) > 1:
-                        percentage = round(
-                            (int(float(parts[0])) / int(float(parts[1]))) * 100, 2
-                        )
-                        old_info["percentage"] = percentage
+                    percentage = slot["action_line"].split("Verifying: ")[-1].split("/")
+                    percentage = round(
+                        (int(float(percentage[0])) / int(float(percentage[1]))) * 100, 2
+                    )
+                    old_info["percentage"] = percentage
                 elif slot["status"] == "Repairing":
                     action = slot["action_line"].split("Repairing: ")[-1].split()
-                    if len(action) > 2:
-                        old_info["percentage"] = action[0].strip("%")
-                        old_info["timeleft"] = action[2]
+                    percentage = action[0].strip("%")
+                    eta = action[2]
+                    old_info["percentage"] = percentage
+                    old_info["timeleft"] = eta
                 elif slot["status"] == "Extracting":
                     if "Unpacking" in slot["action_line"]:
                         action = slot["action_line"].split("Unpacking: ")[-1].split()
@@ -56,13 +55,13 @@ async def get_download(nzo_id, old_info=None):
                         action = (
                             slot["action_line"].split("Direct Unpack: ")[-1].split()
                         )
-                    if len(action) > 2:
-                        parts = action[0].split("/")
-                        if len(parts) > 1:
-                            old_info["percentage"] = round(
-                                (int(float(parts[0])) / int(float(parts[1]))) * 100, 2
-                            )
-                            old_info["timeleft"] = action[2]
+                    percentage = action[0].split("/")
+                    percentage = round(
+                        (int(float(percentage[0])) / int(float(percentage[1]))) * 100, 2
+                    )
+                    eta = action[2]
+                    old_info["percentage"] = percentage
+                    old_info["timeleft"] = eta
                 old_info["status"] = slot["status"]
         return old_info
     except Exception as e:
@@ -158,5 +157,10 @@ class SabnzbdStatus:
         LOGGER.info(f"Cancelling Download: {self.name()}")
         await gather(
             self.listener.on_download_error("Stopped by user!"),
-            _remove_job(self._gid, self.listener.mid),
+            sabnzbd_client.delete_job(self._gid, delete_files=True),
+            sabnzbd_client.delete_category(f"{self.listener.mid}"),
+            sabnzbd_client.delete_history(self._gid, delete_files=True),
         )
+        async with nzb_listener_lock:
+            if self._gid in nzb_jobs:
+                del nzb_jobs[self._gid]

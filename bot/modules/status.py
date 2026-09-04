@@ -13,14 +13,12 @@ from .. import (
     sabnzbd_client,
     DOWNLOAD_DIR,
 )
-from ..core.config_manager import Config
 from ..core.torrent_manager import TorrentManager
 from ..core.jdownloader_booter import jdownloader
 from ..helper.ext_utils.bot_utils import new_task
 from ..helper.ext_utils.status_utils import (
     EngineStatus,
     MirrorStatus,
-    get_bandwidth_string,
     get_readable_file_size,
     get_readable_time,
     speed_string_to_bytes,
@@ -47,8 +45,7 @@ async def task_status(_, message):
 
 ⌬ <b><u>Bot Stats</u></b>
 ┟ <b>CPU</b> → {cpu_percent()}% | <b>F</b> → {free} [{round(100 - disk_usage(DOWNLOAD_DIR).percent, 1)}%]
-┠ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {currentTime}
-┖ <b>BW</b> → {get_bandwidth_string()}
+┖ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {currentTime}
 """
         reply_message = await send_message(message, msg)
         await auto_delete_message(message, reply_message)
@@ -75,7 +72,7 @@ async def get_download_status(download):
     eng = download.engine
     speed = (
         download.speed()
-        if eng.startswith(("WzPyro", "yt-dlp", "RClone", "Google-API"))
+        if eng.startswith(("Pyro", "yt-dlp", "RClone", "Google-API"))
         else 0
     )
     return (
@@ -146,7 +143,7 @@ async def status_pages(_, query):
             dl_speed, seed_speed = await TorrentManager.overall_speed()
 
         if any(eng == eng_status.STATUS_SABNZBD for _, __, eng in status_results):
-            if not Config.DISABLE_NZB and sabnzbd_client.LOGGED_IN:
+            if sabnzbd_client.LOGGED_IN:
                 dl_speed += (
                     int(
                         float(
@@ -159,7 +156,7 @@ async def status_pages(_, query):
                 )
 
         if any(eng == eng_status.STATUS_JD for _, __, eng in status_results):
-            if not Config.DISABLE_JD and jdownloader.is_connected:
+            if jdownloader.is_connected:
                 dl_speed += (
                     await jdownloader.device.downloadcontroller.get_speed_in_bytes()
                 )

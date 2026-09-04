@@ -4,13 +4,11 @@ from pyrogram.enums import ButtonStyle
 from re import findall
 from time import time
 
-from psutil import cpu_percent, disk_usage, virtual_memory, net_io_counters
+from psutil import cpu_percent, disk_usage, virtual_memory
 
 from ... import (
     DOWNLOAD_DIR,
-    LOGGER,
     bot_cache,
-    bot_loop,
     bot_start_time,
     status_dict,
     task_dict,
@@ -39,7 +37,6 @@ class MirrorStatus:
     STATUS_FFMPEG = "FFmpeg"
     STATUS_YT = "YouTube"
     STATUS_METADATA = "Metadata"
-    STATUS_SEEDR = "Seedr"
 
 
 class EngineStatus:
@@ -49,8 +46,8 @@ class EngineStatus:
         self.STATUS_AIOHTTP = f"AioHttp v{ver.get('aiohttp', 'N/A')}"
         self.STATUS_GDAPI = f"Google-API v{ver.get('gapi', 'N/A')}"
         self.STATUS_QBIT = f"qBit v{ver.get('qBittorrent', 'N/A')}"
-        self.STATUS_TGRAM = f"WzPyro v{ver.get('wzgram', 'N/A')}"
-        self.STATUS_MEGA = f"MegaSDK v{ver.get('mega', 'N/A')}"
+        self.STATUS_TGRAM = f"Pyro v{ver.get('pyrotgfork', 'N/A')}"
+        self.STATUS_MEGA = f"MegaCMD v{ver.get('mega', 'N/A')}"
         self.STATUS_YTDLP = f"yt-dlp v{ver.get('yt-dlp', 'N/A')}"
         self.STATUS_FFMPEG = f"ffmpeg v{ver.get('ffmpeg', 'N/A')}"
         self.STATUS_7Z = f"7z v{ver.get('7z', 'N/A')}"
@@ -58,10 +55,10 @@ class EngineStatus:
         self.STATUS_SABNZBD = f"SABnzbd+ v{ver.get('SABnzbd+', 'N/A')}"
         self.STATUS_QUEUE = "QSystem v2"
         self.STATUS_JD = "JDownloader v2"
+        self.STATUS_SEEDR = "Seedr"
         self.STATUS_YT = "Youtube-Api"
         self.STATUS_METADATA = "Metadata"
         self.STATUS_UPHOSTER = "Uphoster"
-        self.STATUS_SEEDR = "Seedr"
 
 
 STATUSES = {
@@ -135,8 +132,6 @@ def get_raw_file_size(size):
 def get_readable_file_size(size_in_bytes):
     if not size_in_bytes:
         return "0B"
-    if size_in_bytes < 0:
-        return "Unknown"
 
     index = 0
     while size_in_bytes >= 1024 and index < len(SIZE_UNITS) - 1:
@@ -203,100 +198,9 @@ def get_progress_bar_string(pct):
     pct = float(str(pct).strip("%"))
     p = min(max(pct, 0), 100)
     cFull = int(p // 8)
-    cPart = int(p % 8 - 1)
-    p_str = "■" * cFull
-    if cPart >= 0:
-        p_str += ["▤", "▥", "▦", "▧", "▨", "▩", "■"][cPart]
-    p_str += "□" * (12 - cFull)
+    p_str = "⬢" * cFull
+    p_str += "⬡" * (12 - cFull)
     return f"[{p_str}]"
-
-
-bandwidth_alerts_sent = set()
-
-
-def _send_bandwidth_alert(level, used_bytes, total_bytes):
-    if level not in bandwidth_alerts_sent:
-        bandwidth_alerts_sent.add(level)
-        used_str = get_readable_file_size(used_bytes)
-        total_str = get_readable_file_size(total_bytes)
-        LOGGER.warning(
-            f"Monthly Bandwidth Alert: {level}% reached ({used_str} / {total_str})"
-        )
-
-        async def _alert():
-            if Config.OWNER_ID:
-                try:
-                    from ...core.tg_client import TgClient
-
-                    msg = (
-                        f"⚠️ <b>Monthly Bandwidth Alert!</b>\n"
-                        f"Server bandwidth usage has reached <b>{level}%</b> of monthly limit!\n"
-                        f"<b>Usage:</b> {used_str} / {total_str}"
-                    )
-                    await TgClient.bot.send_message(chat_id=Config.OWNER_ID, text=msg)
-                except Exception as e:
-                    LOGGER.error(f"Failed to send bandwidth alert to OWNER_ID: {e}")
-
-        try:
-            bot_loop.create_task(_alert())
-        except Exception:
-            pass
-
-
-_historical_bw = 0
-_last_raw_bw = 0
-
-
-async def init_bandwidth():
-    global _historical_bw, _last_raw_bw
-    from .db_handler import database
-
-    net_io = net_io_counters()
-    _last_raw_bw = net_io.bytes_sent + net_io.bytes_recv
-    if Config.DATABASE_URL:
-        _historical_bw = await database.get_bandwidth()
-
-
-async def set_bandwidth(bytes_count):
-    global _historical_bw, _last_raw_bw
-    from .db_handler import database
-
-    net_io = net_io_counters()
-    _last_raw_bw = net_io.bytes_sent + net_io.bytes_recv
-    _historical_bw = bytes_count
-    if Config.DATABASE_URL:
-        await database.update_bandwidth(bytes_count)
-
-
-def get_bandwidth_string():
-    global _historical_bw, _last_raw_bw
-    net_io = net_io_counters()
-    raw_bw = net_io.bytes_sent + net_io.bytes_recv
-    if raw_bw < _last_raw_bw:
-        _historical_bw += _last_raw_bw
-    _last_raw_bw = raw_bw
-    total_bandwidth = _historical_bw + raw_bw
-
-    if Config.DATABASE_URL and bot_loop and bot_loop.is_running():
-        from .db_handler import database
-
-        bot_loop.create_task(database.update_bandwidth(total_bandwidth))
-
-    if Config.MONTHLY_BANDWIDTH:
-        mbw = Config.MONTHLY_BANDWIDTH * 1024 * 1024 * 1024
-        pct = round((total_bandwidth / mbw) * 100, 1)
-        alert = ""
-        if pct >= 100:
-            alert = " 🚨 <b>(LIMIT EXCEEDED!)</b>"
-            _send_bandwidth_alert(100, total_bandwidth, mbw)
-        elif pct >= 90:
-            alert = " ⚠️ <b>(CRITICAL)</b>"
-            _send_bandwidth_alert(90, total_bandwidth, mbw)
-        elif pct >= 80:
-            alert = " ⚠️"
-            _send_bandwidth_alert(80, total_bandwidth, mbw)
-        return f"{get_readable_file_size(total_bandwidth)} / {get_readable_file_size(mbw)} [{pct}%]{alert}"
-    return get_readable_file_size(total_bandwidth)
 
 
 async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=1):
@@ -372,19 +276,8 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             msg += f"\n┠ <b>Size</b> → <i>{task.size()}</i>"
         msg += f"\n┠ <b>Engine</b> → <i>{task.engine}</i>"
         msg += f"\n┠ <b>In / Out Mode</b> → <i>{task.listener.mode[0]}</i> | <i>{task.listener.mode[1]}</i>"
+        # TODO: Add Bt Sel
         from ..telegram_helper.bot_commands import BotCommands
-
-        if tstatus in [
-            MirrorStatus.STATUS_DOWNLOAD,
-            MirrorStatus.STATUS_PAUSED,
-            MirrorStatus.STATUS_QUEUEDL,
-        ]:
-            if (
-                task.listener.is_torrent
-                or task.listener.is_qbit
-                or task.listener.is_nzb
-            ) and not getattr(task.listener, "is_staged_qbit", False):
-                msg += f"\n┠ <b>Select</b> → /{BotCommands.SelectCommand[1]}_{task.gid()[:8]}"
 
         msg += f"\n<b>┖ Stop</b> → <i>/{BotCommands.CancelTaskCommand[1]}_{task.gid()[:8]}</i>\n\n"
 
@@ -419,6 +312,5 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
     )
     button = buttons.build_menu(8)
     msg += f"\n┟ <b>CPU</b> → {cpu_percent()}% | <b>F</b> → {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)} [{round(100 - disk_usage(DOWNLOAD_DIR).percent, 1)}%]"
-    msg += f"\n┠ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {get_readable_time(time() - bot_start_time)}"
-    msg += f"\n┖ <b>BW</b> → {get_bandwidth_string()}"
+    msg += f"\n┖ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {get_readable_time(time() - bot_start_time)}"
     return msg, button

@@ -65,9 +65,6 @@ class YouTubeUpload(YouTubeHelper):
         elif hasattr(self.listener, "user_id") and self.listener.user_id:
             self.token_path = f"tokens/{self.listener.user_id}.pickle"
 
-    def _yt_opt(self, key):
-        return self.listener.user_dict.get(key) or Config.get(key)
-
     def upload(self):
         """Main upload function"""
         self.user_setting()
@@ -95,9 +92,7 @@ class YouTubeUpload(YouTubeHelper):
                     )
 
                 playlist_id = self._create_playlist(
-                    self.name,
-                    self._yt_opt("YT_PRIVACY_STATUS"),
-                    self._yt_opt("YT_DESP"),
+                    self.name, Config.YT_PRIVACY_STATUS, Config.YT_DESP
                 )
                 if not playlist_id:
                     raise ValueError("Failed to create playlist.")
@@ -234,10 +229,10 @@ class YouTubeUpload(YouTubeHelper):
         """Upload video to YouTube and optionally add to a playlist."""
 
         title = file_name
-        description = self._yt_opt("YT_DESP")
-        tags = self._yt_opt("YT_TAGS")
-        category_id = str(self._yt_opt("YT_CATEGORY_ID"))
-        privacy_status = self._yt_opt("YT_PRIVACY_STATUS")
+        description = Config.YT_DESP
+        tags = Config.YT_TAGS
+        category_id = Config.YT_CATEGORY_ID
+        privacy_status = Config.YT_PRIVACY_STATUS
 
         video_body = {
             "snippet": {
@@ -263,8 +258,6 @@ class YouTubeUpload(YouTubeHelper):
         video_response = None
         retries = 0
         current_chunk_uploaded_bytes = 0
-        self.status = None
-        self.file_processed_bytes = 0
 
         while video_response is None and not self.listener.is_cancelled:
             try:

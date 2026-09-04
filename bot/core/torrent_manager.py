@@ -1,15 +1,7 @@
-from asyncio import (
-    TimeoutError,
-    create_subprocess_exec,
-    create_subprocess_shell,
-    gather,
-    sleep,
-)
+from asyncio import TimeoutError, gather
 from contextlib import suppress
 from inspect import iscoroutinefunction
 from pathlib import Path
-from os import getcwd
-from time import time
 
 from aioaria2 import Aria2WebsocketClient
 from aiohttp import ClientError
@@ -22,8 +14,7 @@ from tenacity import (
 )
 
 from .. import LOGGER, aria2_options
-from ..helper.ext_utils.bot_utils import derive_service_password, cmd_exec
-from .config_manager import BinConfig, Config
+from .config_manager import Config
 
 
 def wrap_with_retry(obj, max_retries=3):
@@ -45,64 +36,24 @@ def wrap_with_retry(obj, max_retries=3):
     return obj
 
 
-def _qbit_password():
-    return derive_service_password(
-        (Config.BOT_TOKEN or "").split(":", 1)[0] or "0",
-        "qbit",
-    )
-
-
-async def _connect_aria2(retries=5, delay=2):
-    from aioaria2.exceptions import Aria2rpcException
-
-    for i in range(retries):
-        try:
-            return await Aria2WebsocketClient.new("http://localhost:6800/jsonrpc")
-        except Aria2rpcException:
-            if i == retries - 1:
-                raise
-            await sleep(delay)
-
-
 class TorrentManager:
     aria2 = None
     qbittorrent = None
-    _qbit_process = None
-    _last_qbit_restart = 0
-    _restart_debounce = 60
-
-    @classmethod
-    async def _auth_qbit(cls):
-        if cls.qbittorrent is None:
-            return False
-        pwd = _qbit_password()
-        try:
-            await cls.qbittorrent.auth.login("admin", pwd)
-            return True
-        except Exception:
-            return False
 
     @classmethod
     async def initiate(cls):
         if cls.aria2:
             return
         try:
-            cls.aria2 = await _connect_aria2()
+            cls.aria2 = await Aria2WebsocketClient.new("http://localhost:6800/jsonrpc")
             LOGGER.info("Aria2 initialized successfully.")
 
             if Config.DISABLE_TORRENTS:
                 LOGGER.info("Torrents are disabled.")
                 return
 
-            cls._qbit_process = await create_subprocess_exec(
-                BinConfig.QBIT_NAME, "-d", f"--profile={getcwd()}/configs/qbittorrent"
-            )
-            await sleep(2)
-            LOGGER.info("qBittorrent started !")
-
             cls.qbittorrent = await create_client("http://localhost:8090/api/v2/")
             cls.qbittorrent = wrap_with_retry(cls.qbittorrent)
-            await cls._auth_qbit()
 
         except Exception as e:
             LOGGER.error(f"Error during initialization: {e}")
@@ -120,48 +71,6 @@ class TorrentManager:
             cls.qbittorrent = None
         if close_tasks:
             await gather(*close_tasks)
-
-    @classmethod
-    async def ensure_qbit(cls):
-        for _ in range(10):
-            if cls.qbittorrent is not None:
-                try:
-                    await cls.qbittorrent.app.version()
-                    return True
-                except Exception:
-                    pass
-            await cls._start_qbit()
-            if cls.qbittorrent is not None:
-                return True
-            await sleep(2)
-        return cls.qbittorrent is not None
-
-    @classmethod
-    async def _start_qbit(cls):
-        now = time()
-        if now - cls._last_qbit_restart < cls._restart_debounce:
-            return False
-        cls._last_qbit_restart = now
-        LOGGER.info("(Re)starting qBittorrent...")
-        try:
-            if cls.qbittorrent:
-                try:
-                    await cls.qbittorrent.close()
-                except Exception:
-                    pass
-                cls.qbittorrent = None
-            cls._qbit_process = await create_subprocess_exec(
-                BinConfig.QBIT_NAME, "-d", f"--profile={getcwd()}/configs/qbittorrent"
-            )
-            await sleep(3)
-            cls.qbittorrent = await create_client("http://localhost:8090/api/v2/")
-            cls.qbittorrent = wrap_with_retry(cls.qbittorrent)
-            await cls._auth_qbit()
-            LOGGER.info("qBittorrent (re)started successfully")
-            return True
-        except Exception as e:
-            LOGGER.error(f"Failed to (re)start qBittorrent: {e}")
-            return False
 
     @classmethod
     async def aria2_remove(cls, download):
@@ -233,38 +142,6 @@ class TorrentManager:
         if key not in ["checksum", "index-out", "out", "pause", "select-file"]:
             await cls.aria2.changeGlobalOption({key: value})
             aria2_options[key] = value
-
-    @classmethod
-    async def restart_aria2(cls):
-        LOGGER.info("(Re)starting Aria2c...")
-        if cls.aria2:
-            with suppress(Exception):
-                await cls.aria2.close()
-            cls.aria2 = None
-
-        await cmd_exec(["pkill", "-9", "-f", BinConfig.ARIA2_NAME])
-        await sleep(1)
-
-        from .. import service_cores
-
-        cmd = f'chmod +x setpkgs.sh && ./setpkgs.sh {BinConfig.ARIA2_NAME} "{service_cores}" {Config.CPU_LIMIT}'
-        await (await create_subprocess_shell(cmd)).wait()
-        await sleep(2)
-
-        try:
-            cls.aria2 = await _connect_aria2()
-            from ..helper.listeners.aria2_listener import add_aria2_callbacks
-
-            add_aria2_callbacks()
-
-            from .startup import update_aria2_options
-
-            await update_aria2_options()
-            LOGGER.info("Aria2c (re)started successfully")
-            return True
-        except Exception as e:
-            LOGGER.error(f"Failed to (re)start Aria2c: {e}")
-            return False
 
 
 def aria2_name(download_info):

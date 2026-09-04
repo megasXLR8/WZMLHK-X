@@ -307,7 +307,7 @@ def apply_filters(
                     )
                     if mod_time < date_filter:
                         continue
-                except Exception:
+                except:
                     pass
 
         matched_files.append(f)
@@ -678,6 +678,9 @@ async def latest_uploads(client: Client, message: Message):
     """Show latest uploaded/modified files with pagination and highlights."""
     user_id = message.from_user.id
 
+    # Number of results per page (same as RESULTS_PER_PAGE)
+    per_page = RESULTS_PER_PAGE
+
     # "Fetching latest uploads..." indicator
     fetching_msg = await message.reply_text(
         "⏳ Fetching latest uploads...", parse_mode=ParseMode.MARKDOWN
@@ -698,7 +701,7 @@ async def latest_uploads(client: Client, message: Message):
     def get_mod_time(f):
         try:
             return datetime.fromisoformat(f.get("ModTime", "").replace("Z", "+00:00"))
-        except Exception:
+        except:
             return datetime.min
 
     file_list.sort(key=get_mod_time, reverse=True)

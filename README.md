@@ -1,5 +1,5 @@
 <p align="center">
-   <img src="docs/w-icon.svg" alt="WZML-X logo" width="160">
+   <img src="docs/WZML-X.png" alt="WZML-X logo" width="420">
 </p>
 
 <h1 align="center">WZML-X</h1>
@@ -57,8 +57,9 @@
 | Area | Details |
 |---|---|
 | Runtime | Python Telegram bot + web UI |
-| Deployment | Docker & Docker Compose (buildx) |
+| Deployment | Docker & Docker Compose |
 | Required config | `BOT_TOKEN`, `TELEGRAM_API`, `TELEGRAM_HASH`, `OWNER_ID`, `DATABASE_URL` |
+| Port controls | `BASE_URL_PORT`, `RCLONE_SERVE_PORT` |
 | License | [LICENSE](LICENSE) |
 
 ## Why Use It
@@ -92,84 +93,41 @@ Deploy with Docker and provide the required configuration values. The container 
 ## Deployment
 
 <details open>
-   <summary>VPS / Dedicated Server (Recommended)</summary>
+   <summary>Recommended: Docker Compose</summary>
 
    ```bash
    git clone https://github.com/SilentDemonSD/WZML-X.git
    cd WZML-X
-   cp config_sample.py config.py
-   # Edit config.py with your values
-   docker buildx compose up -d
+   docker compose up --build
    ```
 
-   The bot runs behind a Cloudflare quick tunnel by default. Check the tunnel URL:
-
-   ```bash
-   docker compose logs tunnel
-   ```
-
-   You'll see a `https://*.trycloudflare.com` URL — that's your bot's web UI.
-
-   To stop:
-
-   ```bash
-   docker buildx compose down
-   ```
+   Use this when you want the simplest full deployment path.
 </details>
 
 <details>
-   <summary>VPS with VPN (Gluetun)</summary>
-
-   1. Uncomment the `gluetun` service in `docker-compose.yml`
-   2. Fill in your VPN provider credentials
-   3. Set `network_mode: "service:gluetun"` on the `app` service
-   4. Start:
-
-   ```bash
-   docker buildx compose up -d
-   ```
-
-   All traffic (including the cloudflared tunnel) routes through the VPN.
-</details>
-
-<details>
-   <summary>Multi-Instance (Multiple Bots)</summary>
-
-   Each bot needs its own `config.py` and data volumes. Example for a second bot:
-
-   1. Create `config2.py` with different `BOT_TOKEN`, `OWNER_ID`, etc.
-   2. Uncomment `app2` and `tunnel2` in `docker-compose.yml`
-   3. Edit volume mounts to use `config2.py` and separate data dirs
-   4. Start:
-
-   ```bash
-   docker buildx compose up -d
-   ```
-
-   Each bot gets its own cloudflared tunnel URL. Admin ports (qBittorrent, SABnzbd) are mapped to different host ports (`127.0.0.1:8091`, etc.).
-</details>
-
-<details>
-   <summary>Single Container (Manual)</summary>
+   <summary>Single Container</summary>
 
    ```bash
    git clone https://github.com/SilentDemonSD/WZML-X.git
    cd WZML-X
    docker build -t wzmlx .
-   docker run -p 8080:8080 wzmlx
+   docker run -p 80:80 -p 8080:8080 wzmlx
    ```
+
+   Use this if you want a manual one-container deployment.
 </details>
 
 <details>
    <summary>Deployment Notes</summary>
 
-   1. If you use qBittorrent, tune `AsyncIOThreadsCount` to your machine size.
-   2. Stop the container before removing it, and remove the container before pruning images.
-   3. Useful cleanup commands:
+   1. Set `BASE_URL_PORT` and `RCLONE_SERVE_PORT` to match the ports you want to expose.
+   2. If you use qBittorrent, tune `AsyncIOThreadsCount` to your machine size.
+   3. Stop the container before removing it, and remove the container before pruning images.
+   4. Useful cleanup commands:
 
    ```bash
-   docker container prune
-   docker image prune -a
+   sudo docker container prune
+   sudo docker image prune -a
    ```
 </details>
 
@@ -207,6 +165,7 @@ Then tune the optional behavior from `config_sample.py`.
    | `QUEUE_ALL`, `QUEUE_DOWNLOAD`, `QUEUE_UPLOAD` | Queue pressure and concurrency |
    | `SHOW_CLOUD_LINK` | Whether cloud links are shown to users |
    | `WEB_PINCODE` | Protects web access to file selection |
+   | `UPDATE_PKGS` | Package refresh behavior during startup |
 </details>
 
 <details>
@@ -220,31 +179,6 @@ Then tune the optional behavior from `config_sample.py`.
    - SABnzbd server definitions
    - Google Drive settings
    - RSS, search, media metadata, and logging controls
-</details>
-
-<details>
-   <summary>AllDebrid (<code>-ad</code>)</summary>
-
-   Set `ALLDEBRID_API_KEY` (default: empty, feature off) in `config_sample.py`,
-   in the environment, or from **Bot Settings → Config Variables → ALLDEBRID_API_KEY**.
-
-   Add `-ad` to a mirror/leech command to route the input through AllDebrid:
-
-   - `/mirror <filehost link> -ad` unlocks premium hosts (1fichier, rapidgator,
-     mega, ...) and hands the direct link to the normal downloader.
-   - `/leech <magnet> -ad` (or reply to a `.torrent` with `-ad`) uploads the
-     torrent to AllDebrid, waits for it to finish there, then downloads every
-     file from AllDebrid's CDN — aria2/qBittorrent are bypassed entirely.
-
-   `ALLDEBRID_NO_SEED_TIMEOUT` (default: `180`) caps how many seconds a magnet may
-   stall with no seeders and no download progress before the task is aborted.
-   Set it to `0` to disable the check and rely on AllDebrid's own dead-torrent
-   reporting instead.
-
-   The flag is documented in the mirror help menu under the **AllDebrid** button.
-   Without a key the task fails with `ALLDEBRID_API_KEY is not configured`;
-   without `-ad` nothing changes. Magnets stop after 3 min with no seeders and
-   2 h overall, and are removed from your AllDebrid history if the task fails.
 </details>
 
 ## Project Layout

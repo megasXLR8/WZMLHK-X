@@ -1,5 +1,4 @@
-from json import loads as jloads, JSONDecodeError
-from niquests import AsyncSession
+from httpx import AsyncClient
 from pyrogram.enums import ButtonStyle
 from apscheduler.triggers.interval import IntervalTrigger
 from asyncio import Lock, sleep
@@ -15,12 +14,7 @@ from re import compile, I
 from .. import scheduler, rss_dict, LOGGER
 from ..core.config_manager import Config
 from ..core.tg_client import TgClient
-from ..helper.ext_utils.bot_utils import (
-    new_task,
-    arg_parser,
-    get_size_bytes,
-    resolve_command,
-)
+from ..helper.ext_utils.bot_utils import new_task, arg_parser, get_size_bytes
 from ..helper.ext_utils.status_utils import get_readable_file_size
 from ..helper.ext_utils.db_handler import database
 from ..helper.ext_utils.exceptions import RssShutdownException
@@ -46,60 +40,62 @@ headers = {
 }
 
 
-def _json_to_rss(data, feed_title="TorAPI"):
-    items = (
-        data
-        if isinstance(data, list)
-        else data.get("data", [])
-        if isinstance(data, dict)
-        else []
-    )
-    if not items:
-        return None
-    entries = ""
-    for item in items:
-        title = (
-            item.get("Name", "")
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
-        url = item.get("Url", "")
-        torrent = item.get("Torrent", "")
-        size = item.get("Size", "")
-        entries += f"""<item>
-<title>{title}</title>
-<link>{url}</link>
-<guid isPermaLink="false">{item.get("Id", url)}</guid>
-<enclosure url="{torrent}" type="application/x-bittorrent"/>
-<description>Size: {size}</description>
-</item>
-"""
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:torrent="http://xmlns.ezrss.it/0.1/dtd/">
-<channel>
-<title>{feed_title}</title>
-{entries}
-</channel>
-</rss>"""
+def _find_command_filters(flt):
+    """Recursively extract CommandFilter instances from a composite filter tree."""
+    if hasattr(flt, "commands"):
+        yield flt
+    for attr in ("base", "other"):
+        if child := getattr(flt, attr, None):
+            yield from _find_command_filters(child)
 
 
-def _parse_feed(content):
-    try:
-        data = jloads(content)
-        rss_xml = _json_to_rss(data)
-        if rss_xml:
-            return feed_parse(rss_xml)
-    except (JSONDecodeError, TypeError):
-        pass
-    return feed_parse(content)
+def _build_command_map():
+    """Build a mapping from command name -> handler callback by inspecting
+    the bot's registered message handlers."""
+    mapping = {}
+    for group in TgClient.bot.dispatcher.groups.values():
+        for handler in group:
+            if not isinstance(handler, MessageHandler):
+                continue
+            if handler.filters is None:
+                continue
+            for cmd_filter in _find_command_filters(handler.filters):
+                for cmd in cmd_filter.commands:
+                    mapping[cmd] = handler.callback
+    return mapping
+
+
+_command_map = None
+
+
+def _get_command_map():
+    global _command_map
+    if _command_map is None:
+        _command_map = _build_command_map()
+    return _command_map
+
+
+def _resolve_command(command_str):
+    """Resolve a command string like 'ql -doc' into its handler function.
+
+    Returns the handler function, or None if not recognized.
+    Handles commands with or without CMD_SUFFIX.
+    """
+    cmd_name = command_str.strip().lstrip("/").split(maxsplit=1)[0]
+    mapping = _get_command_map()
+    handler = mapping.get(cmd_name)
+    if handler is None and Config.CMD_SUFFIX:
+        handler = mapping.get(cmd_name + Config.CMD_SUFFIX)
+    if handler is None:
+        LOGGER.warning(f"RSS: Unknown command '{cmd_name}' (from '{command_str}')")
+    return handler
 
 
 async def _start_rss_download(
     url, command, user_id, rss_chat_id, rss_topic_id, item_title
 ):
     """Send a notification to RSS_CHAT and start the download directly."""
-    handler = resolve_command(command)
+    handler = _resolve_command(command)
     if handler is None:
         LOGGER.error(f"RSS: Cannot start download, unknown command: {command}")
         return
@@ -183,11 +179,6 @@ async def update_rss_menu(query):
 
 @new_task
 async def get_rss_menu(_, message):
-    if Config.DISABLE_RSS:
-        await send_message(
-            message, "RSS monitoring is currently disabled by the Bot Owner."
-        )
-        return
     msg, button = await rss_menu(message)
     await send_message(message, msg, button)
 
@@ -250,10 +241,12 @@ async def rss_sub(_, message, pre_event):
             cmd = None
             stv = False
         try:
-            async with AsyncSession(headers=headers, timeout=60) as client:
-                res = await client.get(feed_link, allow_redirects=True)
+            async with AsyncClient(
+                headers=headers, follow_redirects=True, timeout=60, verify=False
+            ) as client:
+                res = await client.get(feed_link)
             html = res.text
-            rss_d = _parse_feed(html)
+            rss_d = feed_parse(html)
             last_link = ""
             last_title = ""
             size = 0
@@ -465,10 +458,12 @@ async def rss_get(_, message, pre_event):
                 msg = await send_message(
                     message, f"Getting the last <b>{count}</b> item(s) from {title}"
                 )
-                async with AsyncSession(headers=headers, timeout=60) as client:
-                    res = await client.get(data["link"], allow_redirects=True)
+                async with AsyncClient(
+                    headers=headers, follow_redirects=True, timeout=60, verify=False
+                ) as client:
+                    res = await client.get(data["link"])
                 html = res.text
-                rss_d = _parse_feed(html)
+                rss_d = feed_parse(html)
                 item_info = ""
                 for item_num in range(count):
                     try:
@@ -486,17 +481,17 @@ async def rss_get(_, message, pre_event):
                 else:
                     await edit_message(msg, item_info)
             except IndexError as e:
-                LOGGER.error(f"RSS get: {e}")
+                LOGGER.error(str(e))
                 await edit_message(
                     msg, "Parse depth exceeded. Try again with a lower value."
                 )
             except Exception as e:
-                LOGGER.error(f"RSS get: {e}")
-                await edit_message(msg, str(e) or "Unknown error occurred")
+                LOGGER.error(str(e))
+                await edit_message(msg, str(e))
         else:
             await send_message(message, "Enter a valid title. Title not found!")
     except Exception as e:
-        LOGGER.error(f"RSS get: {e}")
+        LOGGER.error(str(e))
         await send_message(message, f"Enter a valid value!. {e}")
     await update_rss_menu(pre_event)
 
@@ -820,18 +815,20 @@ async def rss_monitor():
     elif chat.lstrip("-").isdigit():
         rss_chat_id = int(chat)
     for user, items in list(rss_dict.items()):
-        for title, data in list(items.items()):
+        for title, data in items.items():
             try:
                 if data["paused"]:
                     continue
                 tries = 0
                 while True:
                     try:
-                        async with AsyncSession(
+                        async with AsyncClient(
                             headers=headers,
+                            follow_redirects=True,
                             timeout=60,
+                            verify=False,
                         ) as client:
-                            res = await client.get(data["link"], allow_redirects=True)
+                            res = await client.get(data["link"])
                         html = res.text
                         break
                     except Exception:
@@ -839,7 +836,7 @@ async def rss_monitor():
                         if tries > 3:
                             raise
                         continue
-                rss_d = _parse_feed(html)
+                rss_d = feed_parse(html)
                 if not rss_d.entries:
                     LOGGER.warning(
                         f"No entries found for > Feed Title: {title} - Feed Link: {data['link']}"
@@ -949,9 +946,7 @@ async def rss_monitor():
                 LOGGER.info(ex)
                 break
             except Exception as e:
-                LOGGER.error(
-                    f"RSS monitor: {e} - Feed Name: {title} - Feed Link: {data['link']}"
-                )
+                LOGGER.error(f"{e} - Feed Name: {title} - Feed Link: {data['link']}")
                 continue
     if all_paused:
         scheduler.pause()
@@ -971,7 +966,4 @@ def add_job():
 
 
 add_job()
-if not Config.DISABLE_RSS:
-    scheduler.start()
-else:
-    LOGGER.info("RSS monitoring is disabled.")
+scheduler.start()
